@@ -100,11 +100,12 @@ impl<Params: RingParams> Mul for Ring<Params> {
 
 #[cfg(test)]
 mod test {
-    use ark_ff::{One, Zero};
+    use ark_ff::{One, UniformRand, Zero};
     use ark_bn254::fr::Fr as F;
     use crate::ring::{Ring, RingParams};
 
-    pub struct Params;
+    #[derive(Clone)]
+pub struct Params;
 
     impl RingParams for Params {
         type F = F;
@@ -164,5 +165,29 @@ mod test {
         );
     }
 
+    #[test]
+    fn test_ring_multiplication_identity() {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        // Generate 4 random ring elements with coefficients of length Params::N
+        let mut random_coeffs = || (0..Params::N).map(|_| <Params as RingParams>::F::rand(&mut rng)).collect();
+
+        let f1 = Ring::<Params> { coefficients: random_coeffs() };
+        let f2 = Ring::<Params> { coefficients: random_coeffs() };
+        let f3 = Ring::<Params> { coefficients: random_coeffs() };
+        let f4 = Ring::<Params> { coefficients: random_coeffs() };
+
+        // Compute both sides of the identity:
+        let lhs = (f1.clone() - f2.clone()) * (f3.clone() + f4.clone());
+        let rhs = (f1.clone() * f3.clone()) - (f2.clone() * f3.clone()) - (f2.clone() * f4.clone()) + (f1.clone() * f4.clone());
+
+        // Check if both sides are equal
+        assert_eq!(
+            lhs.coefficients, rhs.coefficients,
+            "Multiplication identity (f1 - f2) * (f3 + f4) != (f1 * f3) - (f2 * f3) - (f2 * f4) + (f1 * f4)"
+        );
+    }
 }
 
