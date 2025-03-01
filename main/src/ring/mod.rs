@@ -1,7 +1,9 @@
 use num::Zero;
 use std::ops::{Add, Mul, Neg, Sub};
-use ark_ff::Field;
+use ark_ff::{Field, UniformRand};
+use rand::RngCore;
 use crate::univariate_poly::UnivariatePolynomial;
+use rand_distr::{Normal, Distribution};
 
 /// Define the Ring trait, which includes the field F and the value N.
 pub trait RingParams {
@@ -24,6 +26,32 @@ impl<Params: RingParams> Ring<Params> {
     /// Checks if all coefficients are zero.
     pub fn is_zero(&self) -> bool {
         self.coefficients.iter().all(|&c| c == Params::F::zero())
+    }
+
+    /// Generates a random Ring element with coefficients of length Params::N
+    pub fn rand<R: RngCore>(rng: &mut R) -> Self {
+        let coefficients: Vec<Params::F> = (0..Params::N)
+            .map(|_| Params::F::rand(rng)) // Generate random field elements
+            .collect();
+
+        Ring::<Params> { coefficients }
+    }
+
+    /// Generates a random Ring element with coefficients drawn from a Gaussian distribution
+    /// with mean 0 and variance sigma^2 using a provided RNG.
+    pub fn rand_gaussian<R: RngCore>(rng: &mut R, sigma: f64) -> Self {
+        // Define a Gaussian distribution with mean 0 and variance sigma^2
+        let normal_dist = Normal::new(0.0, sigma).unwrap();
+
+        // Generate coefficients using the Gaussian distribution
+        let coefficients: Vec<Params::F> = (0..Params::N)
+            .map(|_| {
+                // Sample from the Gaussian distribution
+                let sample = normal_dist.sample(rng).round().abs() as u64;
+                Params::F::from(sample)
+            }).collect();
+
+        Ring::<Params> { coefficients }
     }
 
     /// Scalar multiplication by a field element lambda.
@@ -105,7 +133,7 @@ mod test {
     use crate::ring::{Ring, RingParams};
 
     #[derive(Clone)]
-pub struct Params;
+    pub struct Params;
 
     impl RingParams for Params {
         type F = F;
@@ -167,17 +195,12 @@ pub struct Params;
 
     #[test]
     fn test_ring_multiplication_identity() {
-        use rand::Rng;
-
         let mut rng = rand::thread_rng();
 
-        // Generate 4 random ring elements with coefficients of length Params::N
-        let mut random_coeffs = || (0..Params::N).map(|_| <Params as RingParams>::F::rand(&mut rng)).collect();
-
-        let f1 = Ring::<Params> { coefficients: random_coeffs() };
-        let f2 = Ring::<Params> { coefficients: random_coeffs() };
-        let f3 = Ring::<Params> { coefficients: random_coeffs() };
-        let f4 = Ring::<Params> { coefficients: random_coeffs() };
+        let f1 = Ring::<Params>::rand(&mut rng);
+        let f2 = Ring::<Params>::rand(&mut rng);
+        let f3 = Ring::<Params>::rand(&mut rng);
+        let f4 = Ring::<Params>::rand(&mut rng);
 
         // Compute both sides of the identity:
         let lhs = (f1.clone() - f2.clone()) * (f3.clone() + f4.clone());
@@ -185,7 +208,8 @@ pub struct Params;
 
         // Check if both sides are equal
         assert_eq!(
-            lhs.coefficients, rhs.coefficients,
+            lhs.coefficients,
+            rhs.coefficients,
             "Multiplication identity (f1 - f2) * (f3 + f4) != (f1 * f3) - (f2 * f3) - (f2 * f4) + (f1 * f4)"
         );
     }

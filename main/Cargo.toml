@@ -9,3 +9,4 @@ ark-serialize = "0.3"  # If you need serialization support
 ark-bn254 = "0.3"  # If you need pairing-based cryptography with the BN254 curve
 rand = "0.8"
 num = "0.4.3"  # Ensure this is the latest version
+rand_distr = "0.4"
