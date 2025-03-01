@@ -91,7 +91,11 @@ impl<F: Field> Neg for UnivariatePolynomial<F> {
 
     fn neg(self) -> Self {
         // Negate each coefficient of the polynomial
-        let neg_coeffs: Vec<F> = self.coefficients.into_iter().map(|coeff| -coeff).collect();
+        let neg_coeffs: Vec<F> = self.coefficients
+                                    .into_iter()
+                                    .map(|coeff| -coeff)
+                                    .collect();
+
         UnivariatePolynomial::new(&neg_coeffs)
     }
 }
