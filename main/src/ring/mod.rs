@@ -1,120 +1,130 @@
 use num::Zero;
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Neg, Sub};
 use ark_ff::Field;
 use crate::univariate_poly::UnivariatePolynomial;
 
-const N: usize = 8;  // Example N = 8, you can adjust as needed
-
-// Define the RingPolynomial structure.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RingPolynomial<F: Field> {
-    pub coefficients: Vec<F>,  // Coefficients of the polynomial (c_0, c_1, ..., c_{N-1}).
+/// Define the Ring trait, which includes the field F and the value N.
+pub trait RingParams {
+    type F: Field;  // Associated field type
+    const N: usize; // Associated constant N=2^k
 }
 
-impl<F: Field> RingPolynomial<F> {
-    // Constructor for a new RingPolynomial with coefficients.
-    pub fn new(coefficients: Vec<F>) -> Self {
-        assert_eq!(coefficients.len(), N);  // Ensure that the size is fixed at N.
-        Self { coefficients }
-    }
+/// the Ring structure
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ring<Params: RingParams> {
+    pub coefficients: Vec<Params::F>,
+}
 
-    // Polynomial addition (coefficient-wise).
-    pub fn add(&self, other: &Self) -> Self {
-        let mut result = Vec::with_capacity(self.coefficients.len());
-        for (a, b) in self.coefficients.iter().zip(&other.coefficients) {
-            result.push(*a + *b);
-        }
-        Self::new(result)
+impl<Params: RingParams> Ring<Params> {
+    pub fn new(coefficients: &[Params::F]) -> Self {
+        assert_eq!(coefficients.len(), Params::N);
+        Self { coefficients: coefficients.to_vec() }
     }
 
     // Scalar multiplication by a field element lambda.
-    pub fn scalar_multiply(&self, lambda: F) -> Self {
-        let result: Vec<F> = self.coefficients.iter()
-            .map(|&coeff| coeff * lambda.clone())
+    pub fn scalar_multiply(&self, lambda: Params::F) -> Self {
+        let result: Vec<Params::F> = self.coefficients.iter()
+            .map(|&coeff| coeff * lambda)
             .collect();
-        Self::new(result)
-    }
 
-    // Negacyclic multiplication using matrix-vector multiplication.
-    pub fn multiply(&self, other: &Self) -> Self {
-        let mut result = vec![F::zero(); N];
-        // Construct the negacyclic matrix for `self`.
-        let negacyclic_self = self.negacyclic_matrix();
-
-        // Perform the matrix-vector multiplication.
-        for i in 0..N {
-            for j in 0..N {
-                result[i] = result[i].clone() + negacyclic_self[i][j].clone() * other.coefficients[j].clone();
-            }
-        }
-
-        // Return the product polynomial
-        Self::new(result)
-    }
-
-    // Helper function to construct the negacyclic matrix for the polynomial.
-    fn negacyclic_matrix(&self) -> Vec<Vec<F>> {
-        let mut matrix = vec![vec![F::zero(); N]; N];
-        for i in 0..N {
-            for j in 0..N {
-                let idx = (i + j) % N;
-                matrix[i][j] = self.coefficients[idx].clone();
-            }
-        }
-        matrix
+        Self::new(result.as_slice())
     }
 }
 
-impl<F: Field> RingPolynomial<F> {
-    pub fn reduce(univar: UnivariatePolynomial<F>) -> Self {
+impl<Params: RingParams> Add for Ring<Params> {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        let result = self.coefficients.iter()
+            .zip(&other.coefficients)
+            .map(|(a, b)| *a + *b)
+            .collect::<Vec<Params::F>>();
+
+        Self::new(result.as_slice())
+    }
+}
+
+impl<Params: RingParams> Neg for Ring<Params> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        // Negate each coefficient of the polynomial
+        let neg_coeffs: Vec<Params::F> = self.coefficients
+                                                .into_iter()
+                                                .map(|coeff| -coeff)
+                                                .collect();
+
+        Ring::new(neg_coeffs.as_slice())
+    }
+}
+
+impl<Params: RingParams> Sub for Ring<Params> {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        self + (-other)
+    }
+}
+
+impl<Params: RingParams> Ring<Params> {
+    pub fn reduce(univar: UnivariatePolynomial<Params::F>) -> Self {
         let length = univar.coefficients.len();
-        match length {
+
+        if length < Params::N {
             // Case 1: If length is less than N, pad with zeros.
-            len if len < N => RingPolynomial {
+            Ring {
                 coefficients: {
                     let mut padded_coeffs = univar.coefficients.clone();
-                    padded_coeffs.resize(N, F::zero());
+                    padded_coeffs.resize(Params::N, Params::F::zero());
                     padded_coeffs
                 },
-            },
+            }
+        } else if length == Params::N {
             // Case 2: If length is equal to N, return the polynomial as it is.
-            N => RingPolynomial {
+            Ring {
                 coefficients: univar.coefficients,
-            },
+            }
+        } else if length <= 2 * Params::N {
             // Case 3: If length is greater than N but less than or equal to 2N, apply the reduction.
-            len if len <= 2 * N => {
-                let mut reduced_coeffs = vec![F::zero(); N];
-                reduced_coeffs[..N].copy_from_slice(&univar.coefficients[..N]); // Efficient copy
-                for i in N..len {
-                    reduced_coeffs[i - N] -= univar.coefficients[i].clone();
-                }
-                Self::new(reduced_coeffs)
-            },
+            let mut reduced_coeffs = vec![Params::F::zero(); Params::N];
+            reduced_coeffs[..Params::N].copy_from_slice(&univar.coefficients[..Params::N]); // Efficient copy
+            for i in Params::N..length {
+                reduced_coeffs[i - Params::N] -= univar.coefficients[i].clone();
+            }
+            Self::new(reduced_coeffs.as_slice())
+        } else {
             // Case for invalid length greater than or equal to 2N
-            _ => panic!("Polynomial length exceeds or equals 2N, which is not supported."),
+            panic!("Polynomial length exceeds or equals 2N, which is not supported.")
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod test_reduction {
     use super::*;
     use ark_bn254::Fr as F;
 
+    /// Example implementation of the Ring trait for a specific type.
+    pub struct Params;
+    impl RingParams for Params {
+        type F = F;
+        const N: usize = 8;
+    }
 
     // Test case for when the length is less than N (padding is expected)
     #[test]
     fn test_reduce_short_polynomial() {
-        let univar = UnivariatePolynomial {
+        let reduced = Ring::<Params>::reduce(
+            UnivariatePolynomial {
             coefficients: vec![F::from(1), F::from(2)]
-        };
-        let reduced = RingPolynomial::<F>::reduce(univar);
+            }
+        );
 
         // Expected output is a polynomial of length N with padding
-        assert_eq!(reduced.coefficients.len(), N);
+        assert_eq!(reduced.coefficients.len(), Params::N);
         assert_eq!(reduced.coefficients[0], F::from(1));
         assert_eq!(reduced.coefficients[1], F::from(2));
-        for i in 2..N {
+        for i in 2..Params::N {
             assert_eq!(reduced.coefficients[i], F::zero());
         }
     }
@@ -122,14 +132,15 @@ mod tests {
     // Test case for when the length is exactly N (no modification)
     #[test]
     fn test_reduce_exact_polynomial() {
-        let univar = UnivariatePolynomial {
-            coefficients: (0..N).map(|i| F::from(i as u64)).collect(),
-        };
-        let reduced = RingPolynomial::<F>::reduce(univar);
+        let reduced = Ring::<Params>::reduce(
+            UnivariatePolynomial {
+            coefficients: (0..Params::N).map(|i| F::from(i as u64)).collect(),
+            }
+        );
 
         // No modification should happen, so the result should be the same as the input
-        assert_eq!(reduced.coefficients.len(), N);
-        for i in 0..N {
+        assert_eq!(reduced.coefficients.len(), Params::N);
+        for i in 0..Params::N {
             assert_eq!(reduced.coefficients[i], F::from(i as u64));
         }
     }
@@ -137,15 +148,16 @@ mod tests {
     // Test case for when the length is greater than N but less than or equal to 2N (reduction occurs)
     #[test]
     fn test_reduce_long_polynomial() {
-        let univar = UnivariatePolynomial {
-            coefficients: (0..N).map(|i| F::from(i as u64)).chain((0..N).map(|i| F::from(i as u64))).collect(),
-        };
-        let reduced = RingPolynomial::<F>::reduce(univar);
+        let reduced = Ring::<Params>::reduce(
+            UnivariatePolynomial {
+                coefficients: (0..Params::N).map(|i| F::from(i as u64)).chain((0..Params::N).map(|i| F::from(i as u64))).collect(),
+            }
+        );
 
         // Expected result after reduction: first N elements should be the same,
         // and elements from N to 2N should be subtracted from their corresponding coefficients
-        assert_eq!(reduced.coefficients.len(), N);
-        for i in 0..N {
+        assert_eq!(reduced.coefficients.len(), Params::N);
+        for i in 0..Params::N {
             assert_eq!(reduced.coefficients[i], F::zero());
         }
     }
@@ -154,9 +166,10 @@ mod tests {
     #[test]
     #[should_panic(expected = "Polynomial length exceeds or equals 2N, which is not supported.")]
     fn test_reduce_too_large_polynomial() {
-        let univar = UnivariatePolynomial {
-            coefficients: (0..2 * N + 1).map(|i| F::from(i as u64)).collect(),
-        };
-        let _ = RingPolynomial::<F>::reduce(univar);
+        let _ = Ring::<Params>::reduce(
+            UnivariatePolynomial {
+            coefficients: (0..2 * Params::N + 1).map(|i| F::from(i as u64)).collect(),
+            }
+        );
     }
 }
