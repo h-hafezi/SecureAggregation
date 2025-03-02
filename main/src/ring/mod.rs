@@ -1,13 +1,14 @@
-use num::Zero;
+use num::{BigInt, Zero};
 use std::ops::{Add, Mul, Neg, Sub};
-use ark_ff::{Field, UniformRand};
+use ark_ff::{Field, PrimeField, UniformRand};
+use ark_serialize::CanonicalSerialize;
 use rand::RngCore;
 use crate::univariate_poly::UnivariatePolynomial;
 use rand_distr::{Normal, Distribution};
 
 /// Define the Ring trait, which includes the field F and the value N.
-pub trait RingParams {
-    type F: Field;  // Associated field type
+pub trait RingParams: Clone {
+    type F: PrimeField;  // Associated field type
     const N: usize; // Associated constant N=2^k
 }
 
@@ -29,7 +30,7 @@ impl<Params: RingParams> Ring<Params> {
     }
 
     /// Generates a random Ring element with coefficients of length Params::N
-    pub fn rand<R: RngCore>(rng: &mut R) -> Self {
+    pub fn rand<R: ark_std::rand::RngCore>(rng: &mut R) -> Self {
         let coefficients: Vec<Params::F> = (0..Params::N)
             .map(|_| Params::F::rand(rng)) // Generate random field elements
             .collect();
@@ -126,10 +127,31 @@ impl<Params: RingParams> Mul for Ring<Params> {
     }
 }
 
+impl<ParamsF: RingParams> Ring<ParamsF> {
+    pub fn transform<ParamsQ: RingParams>(ring: &Ring<ParamsQ>) -> Ring<ParamsF>
+    where
+        BigInt: From<<ParamsQ as RingParams>::F>,
+        <<ParamsF as RingParams>::F as PrimeField>::BigInt: From<BigInt>,
+    {
+        let coefficients = ring.coefficients.iter().map(|x| {
+            let value = BigInt::from(x.clone()); // Convert ParamsQ::F to BigInt
+
+            // Convert BigInt to the correct F::BigInt representation
+            let value_as_f_bigint = <<ParamsF as RingParams>::F as PrimeField>::BigInt::from(value);
+
+            // Convert the BigInt representation into ParamsF::F
+            ParamsF::F::from_bigint(value_as_f_bigint).unwrap()
+        }).collect();
+
+        Ring { coefficients }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use ark_ff::{One, UniformRand, Zero};
     use ark_bn254::fr::Fr as F;
+    use ark_std::test_rng;
     use crate::ring::{Ring, RingParams};
 
     #[derive(Clone)]
@@ -195,7 +217,7 @@ mod test {
 
     #[test]
     fn test_ring_multiplication_identity() {
-        let mut rng = rand::thread_rng();
+        let mut rng = test_rng();
 
         let f1 = Ring::<Params>::rand(&mut rng);
         let f2 = Ring::<Params>::rand(&mut rng);

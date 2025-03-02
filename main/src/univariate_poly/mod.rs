@@ -126,8 +126,8 @@ impl<F: Field> Sub for UnivariatePolynomial<F> {
 #[cfg(test)]
 mod tests {
     use ark_ff::{Field, UniformRand, Zero};
-    use rand::thread_rng;
     use crate::univariate_poly::UnivariatePolynomial;
+    use ark_std::test_rng;
 
     type F = ark_bn254::fr::Fr;
 
@@ -155,7 +155,7 @@ mod tests {
         ];
         
         let poly = UnivariatePolynomial::new(&coeffs);
-        let x = F::rand(&mut thread_rng());
+        let x = F::rand(&mut test_rng());
 
         // making sure the evaluation function works well
         assert_eq!(
@@ -209,10 +209,10 @@ mod tests {
     #[test]
     fn test_operator_behavior() {
         // Generate random coefficients for four polynomials
-        let f1_coeffs: Vec<F> = (0..4).map(|_| F::rand(&mut thread_rng())).collect();
-        let f2_coeffs: Vec<F> = (0..4).map(|_| F::rand(&mut thread_rng())).collect();
-        let f3_coeffs: Vec<F> = (0..4).map(|_| F::rand(&mut thread_rng())).collect();
-        let f4_coeffs: Vec<F> = (0..4).map(|_| F::rand(&mut thread_rng())).collect();
+        let f1_coeffs: Vec<F> = (0..4).map(|_| F::rand(&mut test_rng())).collect();
+        let f2_coeffs: Vec<F> = (0..4).map(|_| F::rand(&mut test_rng())).collect();
+        let f3_coeffs: Vec<F> = (0..4).map(|_| F::rand(&mut test_rng())).collect();
+        let f4_coeffs: Vec<F> = (0..4).map(|_| F::rand(&mut test_rng())).collect();
 
         // Create the polynomials
         let f1 = UnivariatePolynomial::new(&f1_coeffs);
@@ -221,7 +221,7 @@ mod tests {
         let f4 = UnivariatePolynomial::new(&f4_coeffs);
 
         // Random element r (here we'll use a random Fr value)
-        let r = F::rand(&mut thread_rng());
+        let r = F::rand(&mut test_rng());
 
         // Evaluate the polynomials at r
         let f1_r = f1.evaluate(r);
