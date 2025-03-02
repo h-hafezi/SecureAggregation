@@ -1,4 +1,4 @@
 pub mod univariate_poly;
 mod ring;
-mod KAHE;
+mod kahe;
 

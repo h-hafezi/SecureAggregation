@@ -1,7 +1,6 @@
-use num::{BigInt, Zero};
+use num::{Zero};
 use std::ops::{Add, Mul, Neg, Sub};
-use ark_ff::{Field, PrimeField, UniformRand};
-use ark_serialize::CanonicalSerialize;
+use ark_ff::{BigInteger, PrimeField, UniformRand};
 use rand::RngCore;
 use crate::univariate_poly::UnivariatePolynomial;
 use rand_distr::{Normal, Distribution};
@@ -127,29 +126,36 @@ impl<Params: RingParams> Mul for Ring<Params> {
     }
 }
 
-impl<ParamsF: RingParams> Ring<ParamsF> {
-    pub fn transform<ParamsQ: RingParams>(ring: &Ring<ParamsQ>) -> Ring<ParamsF>
-    where
-        BigInt: From<<ParamsQ as RingParams>::F>,
-        <<ParamsF as RingParams>::F as PrimeField>::BigInt: From<BigInt>,
-    {
+impl<ParamsF: RingParams> Ring<ParamsF>  {
+    pub fn transform<ParamsQ: RingParams>(ring: &Ring<ParamsQ>) -> Ring<ParamsF> {
+        assert_eq!(ParamsF::N, ParamsQ::N, "cannot do conversion between these rings");
+
         let coefficients = ring.coefficients.iter().map(|x| {
-            let value = BigInt::from(x.clone()); // Convert ParamsQ::F to BigInt
-
-            // Convert BigInt to the correct F::BigInt representation
-            let value_as_f_bigint = <<ParamsF as RingParams>::F as PrimeField>::BigInt::from(value);
-
-            // Convert the BigInt representation into ParamsF::F
-            ParamsF::F::from_bigint(value_as_f_bigint).unwrap()
+            // Use the cast_field function to convert from ParamsQ::F to ParamsF::F
+            cast_field::<ParamsQ::F, ParamsF::F>(*x)
         }).collect();
 
         Ring { coefficients }
     }
 }
 
+pub fn cast_field<Fr, Fq>(first_field: Fr) -> Fq
+where
+    Fr: PrimeField,
+    Fq: PrimeField,
+{
+    // Convert the Fr element to its big integer representation
+    let bytes = first_field.into_bigint().to_bytes_le();
+
+    // Convert the big integer representation to an Fq element
+    let fq_element = Fq::from_le_bytes_mod_order(bytes.as_slice());
+
+    fq_element
+}
+
 #[cfg(test)]
 mod test {
-    use ark_ff::{One, UniformRand, Zero};
+    use ark_ff::{One, Zero};
     use ark_bn254::fr::Fr as F;
     use ark_std::test_rng;
     use crate::ring::{Ring, RingParams};
