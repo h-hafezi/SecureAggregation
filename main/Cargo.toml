@@ -68,3 +68,7 @@ parallel = [
 print-trace = [
     "ark-std/print-trace",
 ]
+
+[[bench]]
+harness = false
+name = "bench_nova"

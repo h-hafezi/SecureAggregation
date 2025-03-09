@@ -1,2 +1,2 @@
 pub mod cycle_fold;
-mod nova;
+pub mod nova;
