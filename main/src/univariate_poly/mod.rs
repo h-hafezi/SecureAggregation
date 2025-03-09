@@ -128,7 +128,7 @@ mod tests {
     use ark_ff::{Field, UniformRand, Zero};
     use crate::univariate_poly::UnivariatePolynomial;
     use ark_std::test_rng;
-    use crate::constant_curve::ScalarField;
+    use crate::constant_for_curves::ScalarField;
 
     type F = ScalarField;
 

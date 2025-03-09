@@ -155,7 +155,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::constant_curve::ScalarField as F;
+    use crate::constant_for_curves::ScalarField as F;
     use crate::ring::{Ring, RingParams};
     use ark_ff::{One, Zero};
     use ark_std::test_rng;
