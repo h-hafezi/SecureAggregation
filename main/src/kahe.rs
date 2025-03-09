@@ -81,7 +81,7 @@ mod tests {
     use ark_bn254::Fr;
     use ark_ff::{Fp64, MontBackend, MontConfig};
     use ark_std::test_rng;
-    use rand::{rng};
+    use rand::{thread_rng as rng};
     use crate::kahe::KAHE;
     use crate::ring::{Ring, RingParams};
 

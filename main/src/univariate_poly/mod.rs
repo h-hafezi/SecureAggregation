@@ -128,8 +128,9 @@ mod tests {
     use ark_ff::{Field, UniformRand, Zero};
     use crate::univariate_poly::UnivariatePolynomial;
     use ark_std::test_rng;
+    use crate::constant_curve::ScalarField;
 
-    type F = ark_bn254::fr::Fr;
+    type F = ScalarField;
 
     /// Helper function to evaluate the polynomial P(x) = x^7 + 12 * x^6 + 5 * x^3 + 100 * x^2 + x + 9
     fn original_polynomial<F: Field>(x: F) -> F {
