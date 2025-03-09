@@ -3,7 +3,7 @@ use ark_ec::short_weierstrass::Projective;
 pub mod r1cs;
 pub mod ova;
 pub mod r1cs_var;
-mod conversion;
+pub(crate) mod conversion;
 
 // the following are easier interface for using these types since we don't have to restate Projective
 pub type R1CSShape<G> = r1cs::R1CSShape<Projective<G>>;

@@ -1,3 +1,4 @@
 pub mod non_native;
-mod sparse;
-mod r1cs;
+pub mod sparse;
+pub mod r1cs;
+mod absorb;

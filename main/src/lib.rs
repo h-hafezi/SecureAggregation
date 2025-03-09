@@ -3,6 +3,9 @@ pub mod ring;
 pub mod kahe;
 pub mod constant_for_curves;
 pub mod gadgets;
-mod commitment;
-mod pederson;
+pub mod commitment;
+pub mod pederson;
+pub mod nova;
+mod transcript;
+mod poseidon;
 
