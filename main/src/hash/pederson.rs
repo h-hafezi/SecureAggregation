@@ -14,6 +14,12 @@ pub(crate) const LOG_TARGET: &str = "nexus-nova";
 #[derive(Clone, Debug)]
 pub struct PedersenCommitment<G>(PhantomData<G>);
 
+impl<T> Len for Vec<T> {
+    fn len(&self) -> usize {
+        Vec::len(self)
+    }
+}
+
 impl<G> CommitmentScheme<G> for PedersenCommitment<G>
 where
     G: CurveGroup,
