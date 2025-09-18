@@ -92,9 +92,9 @@ impl<F: Field> Neg for UnivariatePolynomial<F> {
     fn neg(self) -> Self {
         // Negate each coefficient of the polynomial
         let neg_coeffs: Vec<F> = self.coefficients
-                                    .into_iter()
-                                    .map(|coeff| -coeff)
-                                    .collect();
+            .into_iter()
+            .map(|coeff| -coeff)
+            .collect();
 
         UnivariatePolynomial::new(&neg_coeffs)
     }
@@ -126,9 +126,9 @@ impl<F: Field> Sub for UnivariatePolynomial<F> {
 #[cfg(test)]
 mod tests {
     use ark_ff::{Field, UniformRand, Zero};
-    use crate::univariate_poly::UnivariatePolynomial;
     use ark_std::test_rng;
     use crate::constant_for_curves::ScalarField;
+    use crate::ring::univariate_poly::UnivariatePolynomial;
 
     type F = ScalarField;
 
@@ -154,7 +154,7 @@ mod tests {
             F::from(12u64), // x^6
             F::from(1u64), // x^7
         ];
-        
+
         let poly = UnivariatePolynomial::new(&coeffs);
         let x = F::rand(&mut test_rng());
 

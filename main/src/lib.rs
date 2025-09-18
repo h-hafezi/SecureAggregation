@@ -1,10 +1,12 @@
+#![allow(warnings)]
 #![allow(non_snake_case)]
-#[cfg_attr(test, allow(dead_code))]
-
-
-pub mod univariate_poly;
 pub mod ring;
 pub mod kahe;
 pub mod constant_for_curves;
 pub mod commitment;
 pub mod pederson;
+mod math;
+mod util;
+mod transcript;
+mod hash;
+mod gadgets;

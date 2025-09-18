@@ -1,9 +1,12 @@
-use crate::univariate_poly::UnivariatePolynomial;
 use ark_ff::{BigInteger, PrimeField, UniformRand};
 use num::Zero;
 use rand::{Rng, RngCore};
 use rand_distr::{Distribution, Normal};
 use std::ops::{Add, Mul, Neg, Sub};
+use crate::ring::univariate_poly::UnivariatePolynomial;
+
+#[cfg_attr(test, allow(dead_code))]
+mod univariate_poly;
 
 /// Define the Ring trait, which includes the field F and the value N.
 pub trait RingParams: Clone {
