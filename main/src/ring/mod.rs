@@ -29,7 +29,7 @@ impl<Params: RingParams> Ring<Params> {
     }
 
     /// Generates a random Ring element with coefficients of length Params::N
-    pub fn rand<R: ark_std::rand::RngCore>(rng: &mut R) -> Self {
+    pub fn rand<R: RngCore>(rng: &mut R) -> Self {
         let coefficients: Vec<Params::F> = (0..Params::N)
             .map(|_| Params::F::rand(rng)) // Generate random field elements
             .collect();

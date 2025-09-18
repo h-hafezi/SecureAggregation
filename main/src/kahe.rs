@@ -23,7 +23,7 @@ impl<ParamsQ: RingParams, ParamsT: RingParams> KAHE<ParamsQ, ParamsT> {
     }
 
     // KAHE::Setup() - samples and returns a public parameter a ∈ R_{q}
-    pub fn setup<R: ark_std::rand::RngCore>(&self, rng: &mut R) -> Ring<ParamsQ> {
+    pub fn setup<R: RngCore>(&self, rng: &mut R) -> Ring<ParamsQ> {
         Ring::<ParamsQ>::rand(rng)
     }
 
