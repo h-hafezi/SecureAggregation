@@ -63,7 +63,7 @@ impl<F: Absorb + PrimeField> PoseidonHash<F> {
 }
 
 pub struct PoseidonHashVar<F: Absorb + PrimeField> {
-    sponge: PoseidonSpongeVar<F>,
+    pub(crate) sponge: PoseidonSpongeVar<F>,
 }
 
 impl<F: Absorb + PrimeField> PoseidonHashVar<F> {
@@ -141,10 +141,10 @@ mod tests {
 
         let mut hash_object_var: PoseidonHashVar<ScalarField> = PoseidonHashVar::new(cs.clone());
 
-        let one_on_first_curve_var = FpVar::Constant(ScalarField::ONE);
+        let one_on_first_curve_var = FpVar::new_witness(cs.clone(), || Ok(ScalarField::ONE)).unwrap();
         hash_object_var.update_sponge(vec![one_on_first_curve_var.clone(), one_on_first_curve_var.clone()]);
-        let one_on_second_curve_var = NonNativeFieldVar::Constant(BaseField::ONE);
 
+        let one_on_second_curve_var = NonNativeFieldVar::Constant(BaseField::ONE);
         hash_object_var.update_sponge(vec![non_native_to_fpvar(&one_on_second_curve_var)]);
 
         assert_eq!(hash_object_var.output().value().unwrap(), hash_object.output());

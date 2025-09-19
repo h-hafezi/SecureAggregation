@@ -13,3 +13,4 @@ pub mod polynomial;
 pub mod kzh;
 pub mod kzh_fold;
 pub mod nexus_spartan;
+mod merkle_tree;
