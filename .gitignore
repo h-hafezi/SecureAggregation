@@ -75,7 +75,7 @@ fabric.properties
 
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser.idea/
-main/target/
+secure_aggregation/target/
 
 # Ignore Cargo.lock for libraries
-main/Cargo.lock
+secure_aggregation/Cargo.lock
