@@ -73,7 +73,8 @@ print-trace = [
 
 [[bench]]
 harness = false
-name = "bench_nova"
+name = "proof_of_uniqueness"
+
 
 [[bench]]
 harness = false

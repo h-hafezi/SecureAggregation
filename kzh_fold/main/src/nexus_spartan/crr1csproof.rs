@@ -33,7 +33,6 @@ pub struct CRR1CSProof<E: Pairing<ScalarField=F>, PC: KZH<E>, F: PrimeField + Ab
     /// A polynomial evaluation proof of the claimed evaluation ~Z~(ry) with respect to the commitment comm_W.
     pub proof_eval_vars_at_ry: PC::Opening,
 }
-
 impl<F: PrimeField + Absorb> SumcheckInstanceProof<F> {
     pub fn prove_quad<Func, E>(
         claim: &F,
@@ -90,6 +89,7 @@ impl<F: PrimeField + Absorb> SumcheckInstanceProof<F> {
             vec![poly_A[0], poly_B[0]],
         )
     }
+
 
     pub fn prove_cubic_five_terms<Func, E>(
         claim: &F,
