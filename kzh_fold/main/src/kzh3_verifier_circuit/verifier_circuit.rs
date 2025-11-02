@@ -174,7 +174,6 @@ where
             mode,
         ).unwrap();
 
-
         // accumulator instances
         let current_accumulator_instance_var = KZH3InstanceVar::new_variable(
             ns!(cs, "instance"),

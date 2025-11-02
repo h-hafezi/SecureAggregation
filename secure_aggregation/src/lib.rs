@@ -9,3 +9,4 @@ pub mod utils;
 pub mod merkle_tree;
 mod encryption_circuit;
 pub mod pederson;
+mod server_circuit;

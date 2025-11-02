@@ -1,1 +1,1 @@
-mod kzh3_augmented_circuit;
+pub mod kzh3_augmented_circuit;

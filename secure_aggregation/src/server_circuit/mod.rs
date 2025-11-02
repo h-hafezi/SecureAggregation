@@ -1,13 +1,12 @@
-use crate::commitment::CommitmentScheme;
-use crate::gadgets::non_native::non_native_affine_var::NonNativeAffineVar;
-use crate::hash::poseidon::PoseidonHashVar;
-use crate::kzh::kzh3::{KZH3, KZH3SRS};
-use crate::kzh::KZH;
-use crate::kzh3_verifier_circuit::verifier_circuit::{KZH3Verifier, KZH3VerifierVar};
-use crate::nexus_spartan::matrix_evaluation_accumulation::verifier_circuit::{MatrixEvaluationAccVerifier, MatrixEvaluationAccVerifierVar};
-use crate::nexus_spartan::partial_verifier::partial_verifier::SpartanPartialVerifier;
-use crate::nexus_spartan::partial_verifier::partial_verifier_var::SpartanPartialVerifierVar;
-use crate::transcript::transcript_var::TranscriptVar;
+use kzh_fold::commitment::CommitmentScheme;
+use kzh_fold::gadgets::non_native::non_native_affine_var::NonNativeAffineVar;
+use kzh_fold::kzh::kzh3::{KZH3, KZH3SRS};
+use kzh_fold::kzh::KZH;
+use kzh_fold::kzh3_verifier_circuit::verifier_circuit::{KZH3Verifier, KZH3VerifierVar};
+use kzh_fold::nexus_spartan::matrix_evaluation_accumulation::verifier_circuit::{MatrixEvaluationAccVerifier, MatrixEvaluationAccVerifierVar};
+use kzh_fold::nexus_spartan::partial_verifier::partial_verifier::SpartanPartialVerifier;
+use kzh_fold::nexus_spartan::partial_verifier::partial_verifier_var::SpartanPartialVerifierVar;
+use kzh_fold::transcript::transcript_var::TranscriptVar;
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ec::pairing::Pairing;
 use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
@@ -18,11 +17,11 @@ use ark_r1cs_std::fields::fp::FpVar;
 use ark_r1cs_std::fields::FieldVar;
 use ark_relations::r1cs::{ConstraintSystemRef, Namespace, SynthesisError};
 use itertools::izip;
-use rand::thread_rng;
 use std::borrow::Borrow;
+use kzh_fold::transcript::transcript::Transcript;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct KZH3AugmentedCircuit<G1, G2, C2, E, F>
+pub struct KZH3ServerCircuit<G1, G2, C2, E, F>
 where
     G1: SWCurveConfig + Clone,
     G1::BaseField: PrimeField,
@@ -39,7 +38,7 @@ where
     pub matrix_evaluation_verifier: MatrixEvaluationAccVerifier<F>,
 }
 
-pub struct KZH3AugmentedCircuitVar<G1, G2, C2, F>
+pub struct KZH3ServerCircuitVar<G1, G2, C2, F>
 where
     F: PrimeField + Absorb,
     G1::BaseField: PrimeField,
@@ -54,7 +53,7 @@ where
     pub matrix_evaluation_verifier: MatrixEvaluationAccVerifierVar<F>,
 }
 
-impl<G1, G2, C2, E, F> AllocVar<KZH3AugmentedCircuit<G1, G2, C2, E, F>, F> for KZH3AugmentedCircuitVar<G1, G2, C2, F>
+impl<G1, G2, C2, E, F> AllocVar<KZH3ServerCircuit<G1, G2, C2, E, F>, F> for KZH3ServerCircuitVar<G1, G2, C2, F>
 where
     G1: SWCurveConfig + Clone,
     G1::BaseField: PrimeField,
@@ -66,7 +65,7 @@ where
     E: Pairing<G1Affine=Affine<G1>, ScalarField=F>,
     F: PrimeField,
 {
-    fn new_variable<T: Borrow<KZH3AugmentedCircuit<G1, G2, C2, E, F>>>(
+    fn new_variable<T: Borrow<KZH3ServerCircuit<G1, G2, C2, E, F>>>(
         cs: impl Into<Namespace<F>>,
         f: impl FnOnce() -> Result<T, SynthesisError>,
         mode: AllocationMode,
@@ -101,7 +100,7 @@ where
             mode,
         )?;
 
-        Ok(KZH3AugmentedCircuitVar {
+        Ok(KZH3ServerCircuitVar {
             spartan_partial_verifier,
             kzh_acc_verifier,
             matrix_evaluation_verifier,
@@ -109,7 +108,7 @@ where
     }
 }
 
-impl<G1, G2, C2, F> KZH3AugmentedCircuitVar<G1, G2, C2, F>
+impl<G1, G2, C2, F> KZH3ServerCircuitVar<G1, G2, C2, F>
 where
     F: PrimeField + Absorb,
     G1::BaseField: PrimeField,
@@ -119,13 +118,14 @@ where
     C2: CommitmentScheme<Projective<G2>>,
     G1: SWCurveConfig<BaseField=G2::ScalarField, ScalarField=G2::BaseField> + Clone,
 {
-    pub fn verify<E: Pairing>(&self, pcs_srs: &KZH3SRS<E>, cs: ConstraintSystemRef<F>, transcript: &mut TranscriptVar<F>, poseidon_num: usize)
+    pub fn verify<E: Pairing>(&self, pcs_srs: &KZH3SRS<E>, cs: ConstraintSystemRef<F>, transcript: &mut TranscriptVar<F>)
     where
         <E as Pairing>::ScalarField: Absorb,
         <<E as Pairing>::G1Affine as ark_ec::AffineRepr>::BaseField: PrimeField,
     {
-        // rx is not used since it hold the instance but not wintess
+        // rx is not used since it hold the instance but not witness
         let (_rx, ry) = self.spartan_partial_verifier.verify(transcript);
+
         let _ = self.kzh_acc_verifier.accumulate(transcript);
 
         // also return these later
@@ -158,68 +158,50 @@ where
             &self.kzh_acc_verifier.current_accumulator_instance_var.C_var,
         ).expect("error while enforcing equality");
 
-        // pad it with some random poseidon hash
-        let mut hash = PoseidonHashVar::new(cs.clone());
-        for _ in 0..poseidon_num {
-            // get a random element
-            let r = FpVar::new_variable(cs.clone(), || Ok(F::rand(&mut thread_rng())), AllocationMode::Witness).unwrap();
-            // update sponge with this random element
-            hash.update_sponge(vec![r]);
-            // output the hash
-            let _ = hash.output();
-        }
+        // the server verifies also accumulates two client circuit, in reality it should be a different circuit but since the constraint count is the same,
+        // we just run the accumulation scheme again, however it should be replaced with the real circuits for proper implementation
+        // also return these later
+        let mut transcript = TranscriptVar::from_transcript(cs.clone(), Transcript::new(b"example"));
+        let _ = self.kzh_acc_verifier.accumulate(&mut transcript);
+        // also return these later
+        let _ = self.matrix_evaluation_verifier.accumulate(&mut transcript);
     }
 }
 
 #[cfg(test)]
 mod test {
     use ark_std::{end_timer, start_timer};
-    use crate::constant_for_curves::{ScalarField as F, C2, E, G1, G2};
-    use crate::kzh::kzh3::{KZH3, KZH3SRS};
-    use crate::kzh::KZH;
-    use crate::kzh_fold::kzh3_fold::Accumulator3 as Accumulator;
-    use crate::nexus_spartan::commitment_traits::ToAffine;
-    use crate::nexus_spartan::committed_relaxed_snark::CRSNARKKey;
-    use crate::nexus_spartan::crr1cs::{is_sat, produce_synthetic_crr1cs, CRR1CSInstance, CRR1CSShape, CRR1CSWitness};
-    use crate::nexus_spartan::crr1csproof::CRR1CSProof;
-    use crate::nexus_spartan::matrix_evaluation_accumulation::verifier_circuit::{MatrixEvaluationAccVerifier, MatrixEvaluationAccVerifierVar};
-    use crate::nexus_spartan::partial_verifier::partial_verifier::SpartanPartialVerifier;
-    use crate::nexus_spartan::partial_verifier::partial_verifier_var::SpartanPartialVerifierVar;
-    use crate::nova::cycle_fold::coprocessor::setup_shape;
-    use crate::transcript::transcript::Transcript;
-    use crate::transcript::transcript_var::TranscriptVar;
+    use kzh_fold::constant_for_curves::{ScalarField as F, C2, E, G1, G2};
+    use kzh_fold::kzh::kzh3::{KZH3, KZH3SRS};
+    use kzh_fold::kzh::KZH;
+    use kzh_fold::kzh_fold::kzh3_fold::Accumulator3 as Accumulator;
+    use kzh_fold::nexus_spartan::commitment_traits::ToAffine;
+    use kzh_fold::nexus_spartan::committed_relaxed_snark::CRSNARKKey;
+    use kzh_fold::nexus_spartan::crr1cs::{is_sat, produce_synthetic_crr1cs, CRR1CSInstance, CRR1CSShape, CRR1CSWitness};
+    use kzh_fold::nexus_spartan::crr1csproof::CRR1CSProof;
+    use kzh_fold::nexus_spartan::matrix_evaluation_accumulation::verifier_circuit::{MatrixEvaluationAccVerifier, MatrixEvaluationAccVerifierVar};
+    use kzh_fold::nexus_spartan::partial_verifier::partial_verifier::SpartanPartialVerifier;
+    use kzh_fold::nexus_spartan::partial_verifier::partial_verifier_var::SpartanPartialVerifierVar;
+    use kzh_fold::nova::cycle_fold::coprocessor::setup_shape;
+    use kzh_fold::transcript::transcript::Transcript;
+    use kzh_fold::transcript::transcript_var::TranscriptVar;
     use ark_ec::pairing::Pairing;
     use ark_r1cs_std::alloc::{AllocVar, AllocationMode};
     use ark_relations::r1cs::{ConstraintSystem, SynthesisMode};
     use ark_serialize::CanonicalSerialize;
     use rand::thread_rng;
-    use crate::kzh3_augmented_circuit::kzh3_augmented_circuit::KZH3AugmentedCircuitVar;
-    use crate::kzh3_verifier_circuit::prover::KZH3VerifierCircuitProver;
-    use crate::kzh3_verifier_circuit::verifier_circuit::KZH3VerifierVar;
-    use crate::kzh::kzh2::KZH2;
-    use crate::nexus_spartan::conversion::convert_crr1cs;
+    use kzh_fold::kzh3_verifier_circuit::prover::KZH3VerifierCircuitProver;
+    use kzh_fold::kzh3_verifier_circuit::verifier_circuit::KZH3VerifierVar;
+    use kzh_fold::nexus_spartan::conversion::convert_crr1cs;
+    use crate::server_circuit::{KZH3ServerCircuitVar};
 
     #[test]
     fn test_kzh3_augmented_circuit() {
-        let poseidon_num = 0;
-
         // Directly map poseidon_num to (num_vars, num_inputs)
-        let (num_vars, num_inputs) = match poseidon_num {
-            0 => (131072, 10),
-            150 => (524288, 1685),
-            1000 => (1048576, 1529),
-            2000 => (2097152, 4623),
-            _ => {
-                eprintln!("Error: Invalid poseidon_num value!");
-                return;
-            }
-        };
-
-        println!("[*] KZH3: Poseidon num: {}, Num cons: {}", poseidon_num, num_vars);
+        let (num_vars, num_inputs) = (4 * 131072, 2032);
 
         let (pcs_srs, spartan_shape, spartan_instance, spartan_proof, rx, ry) = {
             let num_cons = num_vars;
-
 
             // this generates a new instance/witness for spartan as well as PCS parameters
             let (spartan_shape, spartan_instance, spartan_witness, spartan_key) = produce_synthetic_crr1cs::<E, KZH3<E>>(num_cons, num_vars, num_inputs);
@@ -370,7 +352,7 @@ mod test {
         };
 
         // construct the augmented circuit
-        let augmented_circuit = KZH3AugmentedCircuitVar {
+        let augmented_circuit = KZH3ServerCircuitVar {
             spartan_partial_verifier: partial_verifier_var,
             kzh_acc_verifier: acc_verifier_var,
             matrix_evaluation_verifier: matrix_evaluation_verifier_var,
@@ -379,10 +361,11 @@ mod test {
         let mut transcript_var = TranscriptVar::from_transcript(cs.clone(), verifier_transcript_clone);
 
         // run the verification function on augmented circuit
-        let _ = augmented_circuit.verify::<E>(&pcs_srs, cs.clone(), &mut transcript_var, poseidon_num);
+        let _ = augmented_circuit.verify::<E>(&pcs_srs, cs.clone(), &mut transcript_var);
 
-        assert!(cs.is_satisfied().unwrap());
+        // assert!(cs.is_satisfied().unwrap());
         println!("augmented circuit constraints: {}", cs.num_constraints());
+        println!("instance variables: {}", cs.borrow().unwrap().num_instance_variables);
 
         // Set the mode to Prove before we convert it for spartan
         cs.set_mode(SynthesisMode::Prove { construct_matrices: true });

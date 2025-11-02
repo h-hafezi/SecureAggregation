@@ -17,5 +17,5 @@ pub mod nexus_spartan;
 pub mod kzh2_augmented_circuit;
 pub mod math;
 pub mod transcript;
-mod kzh3_verifier_circuit;
-mod kzh3_augmented_circuit;
+pub mod kzh3_verifier_circuit;
+pub mod kzh3_augmented_circuit;

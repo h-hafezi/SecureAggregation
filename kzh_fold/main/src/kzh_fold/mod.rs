@@ -12,7 +12,7 @@ use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
 pub mod kzh2_fold;
-mod eq_tree;
+pub mod eq_tree;
 pub mod kzh3_fold;
 
 /// returns a vector of length "degree" of E::G1Affine random elements

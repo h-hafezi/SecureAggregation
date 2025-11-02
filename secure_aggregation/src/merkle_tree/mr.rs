@@ -22,6 +22,8 @@ where
     pub tree: Vec<E::ScalarField>,
 }
 
+const ROUNDS: usize = 161;
+
 #[derive(Clone, Debug)]
 pub struct MerkleProof<E>
 where
@@ -129,7 +131,7 @@ where
         let y_native = cast_field::<<<E as Pairing>::G1Affine as AffineRepr>::BaseField, E::ScalarField>(y);
 
         // Apply Poseidon sponge to get the final leaf hash. We create a fresh PoseidonHash.
-        let mimc = MiMC::<E::ScalarField>::new(91); // typical 91 rounds for BN254
+        let mimc = MiMC::<E::ScalarField>::new(ROUNDS);
         mimc.hash_elements(&[x_native, y_native])
     }
 
@@ -138,7 +140,7 @@ where
     where
         <E as Pairing>::ScalarField: ark_crypto_primitives::sponge::Absorb
     {
-        let mimc = MiMC::<E::ScalarField>::new(91);
+        let mimc = MiMC::<E::ScalarField>::new(ROUNDS);
         mimc.hash_elements(&[*left, *right])
     }
 }
