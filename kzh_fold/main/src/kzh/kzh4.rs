@@ -17,6 +17,7 @@ use std::ops::Mul;
 use crate::kzh::kzh2::{KZH2Aux, KZH2Commitment};
 use crate::kzh::kzh3::KZH3Aux;
 use ark_ec::CurveGroup;
+use rayon::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize, Derivative)]
 pub struct KZH4<E: Pairing> {
@@ -125,24 +126,41 @@ where
         }
     }
 
-    fn setup<R: Rng>(maximum_degree: usize, rng: &mut R) -> Self::SRS {
-        let (degree_x, degree_y, degree_z, degree_t) = Self::get_degree_from_maximum_supported_degree(maximum_degree);
-        let (degree_x, degree_y, degree_z, degree_t) = (1 << degree_x, 1 << degree_y, 1 << degree_z, 1 << degree_t);
+    fn setup<R: Rng>(maximum_degree: usize, rng: &mut R) -> Self::SRS
+    where
+        E: Pairing + Send + Sync,
+        E::G1Affine: Send + Sync,
+        E::G2Affine: Send + Sync,
+        E::ScalarField: Send + Sync,
+    {
+        let (degree_x, degree_y, degree_z, degree_t) =
+            Self::get_degree_from_maximum_supported_degree(maximum_degree);
+        let (degree_x, degree_y, degree_z, degree_t) =
+            (1 << degree_x, 1 << degree_y, 1 << degree_z, 1 << degree_t);
 
         let (g, v) = (E::G1Affine::rand(rng), E::G2Affine::rand(rng));
 
-        let tau_x: Vec<E::ScalarField> = (0..degree_x).map(|_| E::ScalarField::rand(rng)).collect();
-        let tau_y: Vec<E::ScalarField> = (0..degree_y).map(|_| E::ScalarField::rand(rng)).collect();
-        let tau_z: Vec<E::ScalarField> = (0..degree_z).map(|_| E::ScalarField::rand(rng)).collect();
-        let tau_t: Vec<E::ScalarField> = (0..degree_t).map(|_| E::ScalarField::rand(rng)).collect();
+        // Generate tau values sequentially (fast enough, small arrays)
+        let tau_x: Vec<E::ScalarField> =
+            (0..degree_x).map(|_| E::ScalarField::rand(rng)).collect();
+        let tau_y: Vec<E::ScalarField> =
+            (0..degree_y).map(|_| E::ScalarField::rand(rng)).collect();
+        let tau_z: Vec<E::ScalarField> =
+            (0..degree_z).map(|_| E::ScalarField::rand(rng)).collect();
+        let tau_t: Vec<E::ScalarField> =
+            (0..degree_t).map(|_| E::ScalarField::rand(rng)).collect();
 
+        // Build H_xyzt, H_yzt, H_zt, H_t in parallel
         let H_xyzt: Vec<_> = (0..degree_x * degree_y * degree_z * degree_t)
+            .into_par_iter()
             .map(|i| {
                 let (i_x, i_y, i_z, i_t) = decompose_index(i, degree_y, degree_z, degree_t);
                 g.mul(tau_x[i_x] * tau_y[i_y] * tau_z[i_z] * tau_t[i_t]).into()
-            }).collect();
+            })
+            .collect();
 
         let H_yzt: Vec<_> = (0..degree_y * degree_z * degree_t)
+            .into_par_iter()
             .map(|i| {
                 let i_y = i / (degree_z * degree_t);
                 let remainder = i % (degree_z * degree_t);
@@ -150,9 +168,11 @@ where
                 let i_t = remainder % degree_t;
 
                 g.mul(tau_y[i_y] * tau_z[i_z] * tau_t[i_t]).into()
-            }).collect();
+            })
+            .collect();
 
         let H_zt: Vec<_> = (0..degree_z * degree_t)
+            .into_par_iter()
             .map(|i| {
                 let i_z = i / degree_t;
                 let i_t = i % degree_t;
@@ -161,13 +181,27 @@ where
             .collect();
 
         let H_t: Vec<_> = (0..degree_t)
+            .into_par_iter()
             .map(|i| g.mul(tau_t[i]).into())
             .collect();
 
-        let V_x: Vec<_> = (0..degree_x).map(|i| v.mul(tau_x[i]).into()).collect();
-        let V_y: Vec<_> = (0..degree_y).map(|i| v.mul(tau_y[i]).into()).collect();
-        let V_z: Vec<_> = (0..degree_z).map(|i| v.mul(tau_z[i]).into()).collect();
-        let V_t: Vec<_> = (0..degree_t).map(|i| v.mul(tau_t[i]).into()).collect();
+        // Parallelize v-based multiplications as well
+        let V_x: Vec<_> = (0..degree_x)
+            .into_par_iter()
+            .map(|i| v.mul(tau_x[i]).into())
+            .collect();
+        let V_y: Vec<_> = (0..degree_y)
+            .into_par_iter()
+            .map(|i| v.mul(tau_y[i]).into())
+            .collect();
+        let V_z: Vec<_> = (0..degree_z)
+            .into_par_iter()
+            .map(|i| v.mul(tau_z[i]).into())
+            .collect();
+        let V_t: Vec<_> = (0..degree_t)
+            .into_par_iter()
+            .map(|i| v.mul(tau_t[i]).into())
+            .collect();
 
         KZH4SRS {
             degree_x,

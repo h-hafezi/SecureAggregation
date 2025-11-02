@@ -22,7 +22,7 @@ where
     pub tree: Vec<E::ScalarField>,
 }
 
-const ROUNDS: usize = 161;
+const ROUNDS: usize = 91;
 
 #[derive(Clone, Debug)]
 pub struct MerkleProof<E>
@@ -174,25 +174,20 @@ where
             .map(|c| c.to_vec())
             .collect();
 
-        // For each chunk, compute the vector of leaf hashes in parallel.
-        // The heaviest work (Poseidon over coordinates) happens here.
-        let per_chunk_leaf_hashes: Vec<Vec<E::ScalarField>> = chunks
+        // Build each subtree in parallel using the existing `build` function.
+        // Each subtree is a full MerkleTree for its chunk.
+        let subtrees: Vec<MerkleTree<E>> = chunks
             .into_par_iter()
-            .map(|chunk_leaves| {
-                // For each leaf in this chunk compute leaf hash
-                let mut hashes: Vec<E::ScalarField> = Vec::with_capacity(chunk_leaves.len());
-                for g in chunk_leaves.into_iter() {
-                    let h = Self::hash_leaf(&g);
-                    hashes.push(h);
-                }
-                hashes
-            })
+            .map(|chunk_leaves| MerkleTree::build(chunk_leaves))
             .collect();
 
-        // Flatten leaf hashes into the final leaves vector (ordered)
+        // Flatten leaf hashes from subtrees into the final leaves vector (ordered)
         let mut flat_leaf_hashes: Vec<E::ScalarField> = Vec::with_capacity(leaf_count);
-        for chunk_hashes in per_chunk_leaf_hashes.into_iter() {
-            flat_leaf_hashes.extend(chunk_hashes.into_iter());
+        for subtree in subtrees.iter() {
+            // subtree.leaf_count == chunk_size
+            let sc = subtree.leaf_count;
+            // leaves are stored at indices sc .. 2*sc - 1 in the subtree.tree
+            flat_leaf_hashes.extend_from_slice(&subtree.tree[sc..2 * sc]);
         }
         assert_eq!(flat_leaf_hashes.len(), leaf_count);
 
@@ -205,7 +200,6 @@ where
         }
 
         // Compute internal nodes bottom-up (sequential). This uses the leaves we filled above.
-        // We could parallelize by level if desired, but this is straightforward and correct.
         for idx in (1..leaf_count).rev() {
             let left = tree[2 * idx];
             let right = tree[2 * idx + 1];
@@ -218,7 +212,6 @@ where
             tree,
         }
     }
-
 }
 
 #[cfg(test)]

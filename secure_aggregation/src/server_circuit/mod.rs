@@ -198,7 +198,7 @@ mod test {
     #[test]
     fn test_kzh3_augmented_circuit() {
         // Directly map poseidon_num to (num_vars, num_inputs)
-        let (num_vars, num_inputs) = (4 * 131072, 2032);
+        let (num_vars, num_inputs) = (2 * 131072, 2031);
 
         let (pcs_srs, spartan_shape, spartan_instance, spartan_proof, rx, ry) = {
             let num_cons = num_vars;
