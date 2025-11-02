@@ -12,7 +12,7 @@ fn bench(c: &mut Criterion) {
         let srs: KZH4SRS<E> = KZH4::setup(n, &mut thread_rng());
 
 
-        let bench_name = format!("Bench KZH2 SRS n={}", n);
+        let bench_name = format!("Bench KZH4 SRS n={}", n);
         c.bench_function(&bench_name, |b| {
             b.iter(|| {
                 // bench srs
@@ -21,7 +21,7 @@ fn bench(c: &mut Criterion) {
         });
 
         // generate the MR
-        let flatten_array: Vec<G1Affine> = srs.H_xyzt.into_iter().flatten().collect();
+        let flatten_array: Vec<G1Affine> = srs.H_xyzt.into_iter().collect();
         assert_eq!(flatten_array.len(), 1 << n);
 
         let bench_name = format!("Build tree parallel with 4 threads, n={}", n);
