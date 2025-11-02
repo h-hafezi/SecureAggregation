@@ -161,10 +161,10 @@ where
         // the server verifies also accumulates two client circuit, in reality it should be a different circuit but since the constraint count is the same,
         // we just run the accumulation scheme again, however it should be replaced with the real circuits for proper implementation
         // also return these later
-        let mut transcript = TranscriptVar::from_transcript(cs.clone(), Transcript::new(b"example"));
-        let _ = self.kzh_acc_verifier.accumulate(&mut transcript);
+        // let mut transcript = TranscriptVar::from_transcript(cs.clone(), Transcript::new(b"example"));
+        let _ = self.kzh_acc_verifier.accumulate(transcript);
         // also return these later
-        let _ = self.matrix_evaluation_verifier.accumulate(&mut transcript);
+        let _ = self.matrix_evaluation_verifier.accumulate(transcript);
     }
 }
 
@@ -198,7 +198,7 @@ mod test {
     #[test]
     fn test_kzh3_augmented_circuit() {
         // Directly map poseidon_num to (num_vars, num_inputs)
-        let (num_vars, num_inputs) = (2 * 131072, 2031);
+        let (num_vars, num_inputs) = (2 * 131072, 10);
 
         let (pcs_srs, spartan_shape, spartan_instance, spartan_proof, rx, ry) = {
             let num_cons = num_vars;
