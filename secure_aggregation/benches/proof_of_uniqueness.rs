@@ -29,6 +29,7 @@ fn bench(c: &mut Criterion) {
         let eq = EqPolynomial::new(r);
         let eq_poly = MultilinearPolynomial::new(eq.evals());
 
+        /*
         let bench_name = format!("server time, n={}", n);
         c.bench_function(&bench_name, |b| {
             b.iter(|| {
@@ -47,6 +48,7 @@ fn bench(c: &mut Criterion) {
                 let _ = KZH4::open(&srs, eval_point.as_slice(), &com, &aux, &poly, &mut thread_rng());
             })
         });
+         */
 
         // run the sumcheck, first server cost
         let (sumcheck_proof, eval_point, eval_res) =  SumcheckInstanceProof::prove_cubic_three_terms(
