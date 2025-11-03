@@ -69,7 +69,7 @@ fn bench(c: &mut Criterion) {
                 sumcheck_proof.verify::<E>(ScalarField::ZERO, n, 3, &mut Transcript::new(b"new transcript")).expect("TODO: panic message");
 
                 // first client cost
-                assert_eq!(eq_poly.evaluate(eval_point.as_slice()), eval_res[2].clone());
+                assert_eq!(eq.evaluate(eval_point.as_slice()), eval_res[2].clone());
 
                 // second client cost
                 KZH4::verify(&srs, eval_point.as_slice(), &eval_res[0].clone(), &com, &open)
