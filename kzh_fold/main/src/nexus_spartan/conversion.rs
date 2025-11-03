@@ -74,6 +74,7 @@ impl<F: PrimeField + Absorb> CRR1CSShape<F> {
                         (row, col + num_vars, val)
                     }).collect()
             };
+
         CRR1CSShape {
             inst: Instance::new(
                 num_constraints,

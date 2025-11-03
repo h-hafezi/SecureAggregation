@@ -7,6 +7,7 @@ use std::fmt::Debug;
 use ark_ff::{PrimeField};
 use ark_serialize::*;
 use rand::{Rng, RngCore};
+use rayon::prelude::*;
 use crate::kzh_fold::generic_linear_combination;
 #[cfg(feature = "parallel")]
 use crate::polynomial::eq_poly::eq_poly::EqPolynomial;
@@ -63,28 +64,27 @@ impl<F: PrimeField> MultilinearPolynomial<F> {
             .collect()
     }
 
-    pub fn bound_poly_var_top(&mut self, r: &F) {
+    pub fn bound_poly_var_top(&mut self, r: &F)
+    where
+        F:  Send + Sync + Copy, // or whatever trait bounds your field type needs
+    {
         let n = self.len() / 2;
-        for i in 0..n {
-            self.evaluation_over_boolean_hypercube[i] = self.evaluation_over_boolean_hypercube[i]
-                + *r * (self.evaluation_over_boolean_hypercube[i + n]
-                - self.evaluation_over_boolean_hypercube[i]);
-        }
-        self.num_variables -= 1;
-        self.len = n;
-        self.evaluation_over_boolean_hypercube = self.evaluation_over_boolean_hypercube[..n].to_vec();
-    }
 
-    pub fn bound_poly_var_bot(&mut self, r: &F) {
-        let n = self.len() / 2;
-        for i in 0..n {
-            self.evaluation_over_boolean_hypercube[i] = self.evaluation_over_boolean_hypercube[2 * i]
-                + *r * (self.evaluation_over_boolean_hypercube[2 * i + 1]
-                - self.evaluation_over_boolean_hypercube[2 * i]);
-        }
+        // Immutable slice of the current data
+        let evals = &self.evaluation_over_boolean_hypercube;
+
+        // Build the new vector in parallel
+        let new_evals: Vec<F> = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                evals[i] + *r * (evals[i + n] - evals[i])
+            })
+            .collect();
+
+        // Replace the old vector with the new one
+        self.evaluation_over_boolean_hypercube = new_evals;
         self.num_variables -= 1;
         self.len = n;
-        self.evaluation_over_boolean_hypercube = self.evaluation_over_boolean_hypercube[..n].to_vec();
     }
 
     // returns Z(r) in O(n) time

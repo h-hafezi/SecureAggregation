@@ -196,7 +196,6 @@ mod test {
     use crate::kzh3_augmented_circuit::kzh3_augmented_circuit::KZH3AugmentedCircuitVar;
     use crate::kzh3_verifier_circuit::prover::KZH3VerifierCircuitProver;
     use crate::kzh3_verifier_circuit::verifier_circuit::KZH3VerifierVar;
-    use crate::kzh::kzh2::KZH2;
     use crate::nexus_spartan::conversion::convert_crr1cs;
 
     #[test]
@@ -206,9 +205,6 @@ mod test {
         // Directly map poseidon_num to (num_vars, num_inputs)
         let (num_vars, num_inputs) = match poseidon_num {
             0 => (131072, 10),
-            150 => (524288, 1685),
-            1000 => (1048576, 1529),
-            2000 => (2097152, 4623),
             _ => {
                 eprintln!("Error: Invalid poseidon_num value!");
                 return;
@@ -223,8 +219,11 @@ mod test {
 
             // this generates a new instance/witness for spartan as well as PCS parameters
             let (spartan_shape, spartan_instance, spartan_witness, spartan_key) = produce_synthetic_crr1cs::<E, KZH3<E>>(num_cons, num_vars, num_inputs);
+            println!("the shape of cs before conversion: {} {} {}", spartan_shape.get_num_cons(), spartan_shape.get_num_vars(), spartan_shape.get_num_inputs());
 
             assert!(is_sat(&spartan_shape, &spartan_instance, &spartan_witness, &spartan_key.gens_r1cs_sat).unwrap());
+
+            println!("spartan instance: {}", spartan_instance.input.assignment.len());
 
             let pcs_srs = spartan_key.gens_r1cs_sat.clone();
 
@@ -269,7 +268,7 @@ mod test {
             let partial_verifier_var = SpartanPartialVerifierVar::new_variable(
                 cs.clone(),
                 || Ok(partial_verifier.clone()),
-                AllocationMode::Input,
+                AllocationMode::Witness,
             ).unwrap();
 
             partial_verifier_var
@@ -383,6 +382,7 @@ mod test {
 
         assert!(cs.is_satisfied().unwrap());
         println!("augmented circuit constraints: {}", cs.num_constraints());
+        println!("instance variables: {}", cs.borrow().unwrap().num_instance_variables);
 
         // Set the mode to Prove before we convert it for spartan
         cs.set_mode(SynthesisMode::Prove { construct_matrices: true });
@@ -395,6 +395,8 @@ mod test {
 
         // get the number the minimum size we need for committing to the constraint system
         let min_num_vars = CRSNARKKey::<E, KZH3<E>>::get_min_num_vars(shape.get_num_cons(), shape.get_num_vars(), shape.get_num_inputs());
+        println!("the shape of cs after conversion: {} {} {}", shape.get_num_cons(), shape.get_num_vars(), shape.get_num_inputs());
+
         let SRS: KZH3SRS<E> = KZH3::setup(min_num_vars + 1, &mut thread_rng());
 
         let (instance, witness): (CRR1CSInstance<E, KZH3<E>>, CRR1CSWitness<E, KZH3<E>>) = convert_crr1cs(cs.clone(), &SRS);
