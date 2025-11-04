@@ -78,8 +78,8 @@ name = "proof_of_uniqueness"
 
 [[bench]]
 harness = false
-name = "ahe_circuit"
+name = "bench_mr"
 
 [[bench]]
 harness = false
-name = "bench_mr"
+name = "server_circuit"
