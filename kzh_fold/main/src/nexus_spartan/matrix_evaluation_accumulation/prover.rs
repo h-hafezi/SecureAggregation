@@ -1,13 +1,14 @@
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
 use rand::RngCore;
-use rayon::prelude::IntoParallelRefIterator;
+use rayon::prelude::*;
 use crate::math::Math;
 use crate::nexus_spartan::crr1cs::CRR1CSShape;
 use crate::polynomial::univariate::univariate::PolynomialInterpolator;
 use crate::transcript::transcript::Transcript;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelIterator;
+use itertools::Itertools;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatrixEvaluationAccumulator<F: PrimeField + Absorb> {
@@ -75,59 +76,84 @@ pub fn fold_matrices_evaluations<F: PrimeField + Absorb>(
     (beta, (q_A, q_B, q_C))
 }
 
-pub fn compute_q<F: PrimeField + Absorb>(shape: &CRR1CSShape<F>,
-                                         eval_point_1: (Vec<F>, Vec<F>),
-                                         eval_point_2: (Vec<F>, Vec<F>),
-) -> (PolynomialInterpolator<F>, PolynomialInterpolator<F>, PolynomialInterpolator<F>) {
-    let (eval_point_1_x, eval_point_1_y) = eval_point_1.clone();
-    let (eval_point_2_x, eval_point_2_y) = eval_point_2.clone();
+pub fn compute_q<F: PrimeField + Absorb>(
+    shape: &CRR1CSShape<F>,
+    eval_point_1: (Vec<F>, Vec<F>),
+    eval_point_2: (Vec<F>, Vec<F>),
+) -> (
+    PolynomialInterpolator<F>,
+    PolynomialInterpolator<F>,
+    PolynomialInterpolator<F>,
+) {
+    let (eval_point_1_x, eval_point_1_y) = eval_point_1;
+    let (eval_point_2_x, eval_point_2_y) = eval_point_2;
 
-    assert_eq!(eval_point_1_x.len(), eval_point_2_x.len(), "arrays with unequal length");
-    assert_eq!(eval_point_1_y.len(), eval_point_2_y.len(), "arrays with unequal length");
+    assert_eq!(
+        eval_point_1_x.len(),
+        eval_point_2_x.len(),
+        "arrays with unequal length"
+    );
+    assert_eq!(
+        eval_point_1_y.len(),
+        eval_point_2_y.len(),
+        "arrays with unequal length"
+    );
 
     let evals_1 = shape.inst.inst.evaluate(&eval_point_1_x, &eval_point_1_y);
     let evals_2 = shape.inst.inst.evaluate(&eval_point_2_x, &eval_point_2_y);
 
+    // Parallelize over the loop index i
+    let results: Vec<(F, F, F, F)> = (2..(64 * shape.get_num_cons()).log_2())
+        .into_par_iter()
+        .map(|i| {
+            let beta = F::from(i as u128);
+
+            // Parallel folding of inputs
+            let folded_input_x: Vec<F> = eval_point_1_x
+                .par_iter()
+                .zip(eval_point_2_x.par_iter())
+                .map(|(rx, rx_prime)| *rx * (F::one() - beta) + *rx_prime * beta)
+                .collect();
+
+            let folded_input_y: Vec<F> = eval_point_1_y
+                .par_iter()
+                .zip(eval_point_2_y.par_iter())
+                .map(|(ry, ry_prime)| *ry * (F::one() - beta) + *ry_prime * beta)
+                .collect();
+
+            // Evaluate folded points
+            let new_eval = shape.inst.inst.evaluate(&folded_input_x, &folded_input_y);
+
+            // Compute quotient terms
+            let denom = beta * (F::one() - beta);
+            let q_A = (new_eval.0 - ((F::one() - beta) * evals_1.0 + beta * evals_2.0)) / denom;
+            let q_B = (new_eval.1 - ((F::one() - beta) * evals_1.1 + beta * evals_2.1)) / denom;
+            let q_C = (new_eval.2 - ((F::one() - beta) * evals_1.2 + beta * evals_2.2)) / denom;
+
+            (beta, q_A, q_B, q_C)
+        })
+        .collect();
+
+    // Split the parallel results
     let mut Q_A = Vec::new();
     let mut Q_B = Vec::new();
     let mut Q_C = Vec::new();
 
-    // we start from 2 because the term (1 - x) * x is zero at 0 and 1
-    for i in 2..(64 *  shape.get_num_cons()).log_2() {
-        let beta = F::from(i as u128);
-
-        // Perform the random combination for r_x_folded and r_y_folded
-        let folded_input_x: Vec<F> = eval_point_1_x.par_iter()
-            .zip(eval_point_2_x.par_iter())
-            .map(|(rx, rx_prime)| *rx * (F::one() - beta) + *rx_prime * beta)
-            .collect();
-
-        let folded_input_y: Vec<F> = eval_point_1_y.par_iter()
-            .zip(eval_point_2_y.par_iter())
-            .map(|(ry, ry_prime)| *ry * (F::one() - beta) + *ry_prime * beta)
-            .collect();
-
-        // Evaluate the folded r_x_folded and r_y_folded
-        let new_evaluation = shape.inst.inst.evaluate(&folded_input_x, &folded_input_y);
-
-        // Calculate the proof values
-        let q_A = (new_evaluation.0 - ((F::one() - beta) * evals_1.0 + beta * evals_2.0)) / (beta * (F::one() - beta));
-        let q_B = (new_evaluation.1 - ((F::one() - beta) * evals_1.1 + beta * evals_2.1)) / (beta * (F::one() - beta));
-        let q_C = (new_evaluation.2 - ((F::one() - beta) * evals_1.2 + beta * evals_2.2)) / (beta * (F::one() - beta));
-
-        Q_A.push((beta, q_A));
-        Q_B.push((beta, q_B));
-        Q_C.push((beta, q_C));
+    for (beta, qA, qB, qC) in results {
+        Q_A.push((beta, qA));
+        Q_B.push((beta, qB));
+        Q_C.push((beta, qC));
     }
 
+    // Interpolate polynomials
     let mut poly_Q_A = PolynomialInterpolator::new();
-    poly_Q_A.interpolate(Q_A.as_slice());
+    poly_Q_A.interpolate(&Q_A);
 
     let mut poly_Q_B = PolynomialInterpolator::new();
-    poly_Q_B.interpolate(Q_B.as_slice());
+    poly_Q_B.interpolate(&Q_B);
 
     let mut poly_Q_C = PolynomialInterpolator::new();
-    poly_Q_C.interpolate(Q_C.as_slice());
+    poly_Q_C.interpolate(&Q_C);
 
     (poly_Q_A, poly_Q_B, poly_Q_C)
 }

@@ -224,12 +224,22 @@ fn bench(c: &mut Criterion) {
                 &srs,
                 &mut new_prover_transcript,
             );
-
-            // evaluate matrices A B C
-            let _ = shape.inst.inst.evaluate(&rx, &ry);
         })
     });
 
+
+    let bench_name = "compute A B C error terms for the next round".to_string();
+    c.bench_function(&bench_name, |b| {
+        b.iter(|| {
+            let _ = MatrixEvaluationAccVerifier::random_from_eval_point(
+                &spartan_shape,
+                rx.clone(),
+                ry.clone(),
+                &mut thread_rng(),
+            );
+
+        })
+    });
 }
 
 fn custom_criterion_config() -> Criterion {

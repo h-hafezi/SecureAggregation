@@ -11,7 +11,7 @@ use kzh_fold::polynomial::multilinear_poly::multilinear_poly::MultilinearPolynom
 use kzh_fold::transcript::transcript::Transcript;
 
 fn bench(c: &mut Criterion) {
-    let num_variables = vec![10, 20, 30];
+    let num_variables = vec![10, 17, 23];
     for n in num_variables {
         let srs = KZH4::<E>::setup(n, &mut thread_rng());
 

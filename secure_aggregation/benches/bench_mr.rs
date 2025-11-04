@@ -6,7 +6,7 @@ use kzh_fold::kzh::kzh4::{KZH4, KZH4SRS};
 use secure_aggregation::merkle_tree::mr::MerkleTree;
 
 fn bench(c: &mut Criterion) {
-    let num_variables = vec![30];
+    let num_variables = vec![10, 17, 23];
     for n in num_variables {
         // get srs
         let srs: KZH4SRS<E> = KZH4::setup(n, &mut thread_rng());
