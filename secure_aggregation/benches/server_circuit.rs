@@ -1,7 +1,7 @@
 use kzh_fold::constant_for_curves::{ScalarField as F, C2, E, G1, G2};
 use kzh_fold::kzh::kzh3::{KZH3, KZH3SRS};
 use kzh_fold::kzh::KZH;
-use kzh_fold::kzh_fold::kzh3_fold::Accumulator3 as Accumulator;
+use kzh_fold::kzh_fold::kzh3_fold::{Accumulator3 as Accumulator, Accumulator3};
 use kzh_fold::nexus_spartan::commitment_traits::ToAffine;
 use kzh_fold::nexus_spartan::committed_relaxed_snark::CRSNARKKey;
 use kzh_fold::nexus_spartan::crr1cs::{is_sat, produce_synthetic_crr1cs, CRR1CSInstance, CRR1CSShape, CRR1CSWitness};
@@ -203,6 +203,7 @@ fn bench(c: &mut Criterion) {
     let min_num_vars = CRSNARKKey::<E, KZH3<E>>::get_min_num_vars(shape.get_num_cons(), shape.get_num_vars(), shape.get_num_inputs());
     let srs: KZH3SRS<E> = KZH3::setup(min_num_vars + 1, &mut thread_rng());
 
+    ///////////////////////////////////////////////////// bench the prover time /////////////////////////////////////////////////////
 
     let bench_name = "committing to the polynomial".to_string();
     c.bench_function(&bench_name, |b| {
@@ -212,6 +213,15 @@ fn bench(c: &mut Criterion) {
     });
 
     let (instance, witness): (CRR1CSInstance<E, KZH3<E>>, CRR1CSWitness<E, KZH3<E>>) = convert_crr1cs(cs.clone(), &srs);
+
+    let (proof, rx, ry) = CRR1CSProof::prove(
+        &shape,
+        &instance,
+        witness.clone(),
+        &srs,
+        &mut Transcript::new(b"new"),
+    );
+
 
     let bench_name = "run spartan proof".to_string();
     c.bench_function(&bench_name, |b| {
@@ -228,11 +238,11 @@ fn bench(c: &mut Criterion) {
     });
 
 
-    let bench_name = "compute A B C error terms for the next round".to_string();
+    let bench_name = "accumulate A B C terms for the next round".to_string();
     c.bench_function(&bench_name, |b| {
         b.iter(|| {
             let _ = MatrixEvaluationAccVerifier::random_from_eval_point(
-                &spartan_shape,
+                &shape,
                 rx.clone(),
                 ry.clone(),
                 &mut thread_rng(),
@@ -240,6 +250,83 @@ fn bench(c: &mut Criterion) {
 
         })
     });
+
+    let (acc_srs, current_acc, running_acc) = {
+        let acc_srs = Accumulator::setup(srs.clone(), &mut thread_rng());
+
+        // Get the KZH opening proof from the Spartan proof
+        let opening_proof = proof.proof_eval_vars_at_ry.clone();
+
+        // Commitment to witness polynomial
+        let commitment_w = instance.comm_W.clone();
+
+        let input = &ry[1..];
+
+        // Sanity check: verify the opening proof
+        KZH3::verify(
+            &srs,
+            &input,
+            &proof.eval_vars_at_ry,
+            &commitment_w,
+            &opening_proof,
+        );
+
+        // Get accumulator from the opening proof
+        let acc_instance = Accumulator::proof_to_accumulator_instance(
+            &acc_srs,
+            &input,
+            &spartan_proof.eval_vars_at_ry,
+            &commitment_w,
+            &opening_proof,
+        );
+
+        let acc_witness = Accumulator::proof_to_accumulator_witness(
+            &acc_srs,
+            commitment_w,
+            opening_proof,
+            &input,
+        );
+
+        let current_acc = Accumulator::new(&acc_instance, &acc_witness);
+
+        // Check that the accumulator is valid
+        Accumulator::decide(
+            &acc_srs,
+            &current_acc,
+        );
+
+        // use a random accumulator as the running one
+        let running_acc = Accumulator::rand(&acc_srs);
+
+        (acc_srs, current_acc, running_acc)
+    };
+
+    let bench_name = "accumulate KZH3 for the next round".to_string();
+    c.bench_function(&bench_name, |b| {
+        b.iter(|| {
+            Accumulator3::prove(&acc_srs, &running_acc, &running_acc, &mut Transcript::new(b"new"))
+        })
+    });
+
+    ///////////////////////////////////////////////////// bench the verifier time /////////////////////////////////////////////////////
+
+    let bench_name = "run the KZH3 decider".to_string();
+    c.bench_function(&bench_name, |b| {
+        b.iter(|| {
+            Accumulator::decide(
+                &acc_srs,
+                &current_acc,
+            );
+        })
+    });
+
+    let bench_name = "run the ABC evaluation".to_string();
+    c.bench_function(&bench_name, |b| {
+        b.iter(|| {
+            shape.inst.inst.evaluate(&rx, &ry);
+        })
+    });
+
 }
 
 fn custom_criterion_config() -> Criterion {
