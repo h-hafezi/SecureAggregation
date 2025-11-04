@@ -275,7 +275,7 @@ where
         // Group D_xy elements by column index modulo srs.degree_x
         let mut grouped_D_xy = vec![Vec::new(); srs.degree_y];
         for (j, val) in aux.D_xy.iter().enumerate() {
-            let i = j % srs.degree_x;
+            let i = j % srs.degree_y;
             grouped_D_xy[i].push(*val);
         }
 
@@ -454,8 +454,7 @@ mod tests {
 
     #[test]
     fn pcs_test() {
-        let (degree_x, degree_y, degree_z, degree_t) = (4usize, 8usize, 2usize, 1usize);
-        let num_vars = degree_x.log_2() + degree_y.log_2() + degree_z.log_2() + degree_t.log_2();
+        let num_vars = 13;
 
         let input: Vec<F> = (0..num_vars)
             .map(|_| F::ZERO)

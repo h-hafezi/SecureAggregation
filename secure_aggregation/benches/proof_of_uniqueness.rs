@@ -14,6 +14,7 @@ fn bench(c: &mut Criterion) {
     let num_variables = vec![10, 17, 23];
     for n in num_variables {
         let srs = KZH4::<E>::setup(n, &mut thread_rng());
+        println!("{} {} {} {}", srs.degree_x, srs.degree_y, srs.degree_z, srs.degree_t);
 
         // generate random binary polynomial
         let mut poly: MultilinearPolynomial<ScalarField> = MultilinearPolynomial::random_binary(n, &mut thread_rng());
@@ -26,13 +27,13 @@ fn bench(c: &mut Criterion) {
             .map(|_| ScalarField::rand(&mut thread_rng()))
             .collect();
 
-        let eq = EqPolynomial::new(r);
+        let eq = EqPolynomial::new(r.clone());
         let eq_poly = MultilinearPolynomial::new(eq.evals());
 
         let bench_name = format!("server time, n={}", n);
         c.bench_function(&bench_name, |b| {
             b.iter(|| {
-                let eq = EqPolynomial::new(r);
+                let eq = EqPolynomial::new(r.clone());
                 let eq_poly = MultilinearPolynomial::new(eq.evals());
 
                 // run the sumcheck, first server cost
