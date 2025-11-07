@@ -2,8 +2,8 @@ use ark_ff::PrimeField;
 
 /// Simple MiMC hash for field elements
 pub struct MiMC<F: PrimeField> {
-    rounds: usize,
-    constants: Vec<F>,
+    pub(crate) rounds: usize,
+    pub(crate) constants: Vec<F>,
 }
 
 impl<F: PrimeField> MiMC<F> {

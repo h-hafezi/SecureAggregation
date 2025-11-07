@@ -91,7 +91,6 @@ pub fn enforce_x_less_than_limit<F: PrimeField>(
     let mut bit_vars: Vec<Boolean<F>> = Vec::with_capacity(n_bits);
     for &b in bits.iter() {
         let b_var = Boolean::<F>::new_witness(cs.clone(), || Ok(b))?;
-        // (&b_var * &b_var - &b_var).enforce_equal(&FpVar::zero())?;
         bit_vars.push(b_var);
     }
 

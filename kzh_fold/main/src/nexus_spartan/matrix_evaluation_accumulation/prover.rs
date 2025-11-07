@@ -88,56 +88,52 @@ pub fn compute_q<F: PrimeField + Absorb>(
     let (eval_point_1_x, eval_point_1_y) = eval_point_1;
     let (eval_point_2_x, eval_point_2_y) = eval_point_2;
 
-    assert_eq!(
-        eval_point_1_x.len(),
-        eval_point_2_x.len(),
-        "arrays with unequal length"
-    );
-    assert_eq!(
-        eval_point_1_y.len(),
-        eval_point_2_y.len(),
-        "arrays with unequal length"
+    assert_eq!(eval_point_1_x.len(), eval_point_2_x.len(), "x arrays must match length");
+    assert_eq!(eval_point_1_y.len(), eval_point_2_y.len(), "y arrays must match length");
+
+    // ✅ Parallelize the two evaluations (independent)
+    let (evals_1, evals_2) = rayon::join(
+        || shape.inst.inst.evaluate(&eval_point_1_x, &eval_point_1_y),
+        || shape.inst.inst.evaluate(&eval_point_2_x, &eval_point_2_y),
     );
 
-    let evals_1 = shape.inst.inst.evaluate(&eval_point_1_x, &eval_point_1_y);
-    let evals_2 = shape.inst.inst.evaluate(&eval_point_2_x, &eval_point_2_y);
-
-    // Parallelize over the loop index i
-    let results: Vec<(F, F, F, F)> = (2..(64 * shape.get_num_cons()).log_2())
+    // ✅ Parallelize over the outer loop only (independent betas)
+    let results: Vec<(F, F, F, F)> = (2..(64 * shape.get_num_cons()).ilog2())
         .into_par_iter()
         .map(|i| {
             let beta = F::from(i as u128);
+            let one_minus_beta = F::one() - beta;
 
-            // Parallel folding of inputs
+            // Fold inputs sequentially (cheap and cache-local)
             let folded_input_x: Vec<F> = eval_point_1_x
-                .par_iter()
-                .zip(eval_point_2_x.par_iter())
-                .map(|(rx, rx_prime)| *rx * (F::one() - beta) + *rx_prime * beta)
+                .iter()
+                .zip(&eval_point_2_x)
+                .map(|(&rx, &rx_prime)| rx * one_minus_beta + rx_prime * beta)
                 .collect();
 
             let folded_input_y: Vec<F> = eval_point_1_y
-                .par_iter()
-                .zip(eval_point_2_y.par_iter())
-                .map(|(ry, ry_prime)| *ry * (F::one() - beta) + *ry_prime * beta)
+                .iter()
+                .zip(&eval_point_2_y)
+                .map(|(&ry, &ry_prime)| ry * one_minus_beta + ry_prime * beta)
                 .collect();
 
             // Evaluate folded points
             let new_eval = shape.inst.inst.evaluate(&folded_input_x, &folded_input_y);
 
             // Compute quotient terms
-            let denom = beta * (F::one() - beta);
-            let q_A = (new_eval.0 - ((F::one() - beta) * evals_1.0 + beta * evals_2.0)) / denom;
-            let q_B = (new_eval.1 - ((F::one() - beta) * evals_1.1 + beta * evals_2.1)) / denom;
-            let q_C = (new_eval.2 - ((F::one() - beta) * evals_1.2 + beta * evals_2.2)) / denom;
+            let denom = beta * one_minus_beta;
+            let q_A = (new_eval.0 - (one_minus_beta * evals_1.0 + beta * evals_2.0)) / denom;
+            let q_B = (new_eval.1 - (one_minus_beta * evals_1.1 + beta * evals_2.1)) / denom;
+            let q_C = (new_eval.2 - (one_minus_beta * evals_1.2 + beta * evals_2.2)) / denom;
 
             (beta, q_A, q_B, q_C)
         })
         .collect();
 
-    // Split the parallel results
-    let mut Q_A = Vec::new();
-    let mut Q_B = Vec::new();
-    let mut Q_C = Vec::new();
+    // Split results (simple and efficient)
+    let mut Q_A = Vec::with_capacity(results.len());
+    let mut Q_B = Vec::with_capacity(results.len());
+    let mut Q_C = Vec::with_capacity(results.len());
 
     for (beta, qA, qB, qC) in results {
         Q_A.push((beta, qA));
@@ -145,15 +141,26 @@ pub fn compute_q<F: PrimeField + Absorb>(
         Q_C.push((beta, qC));
     }
 
-    // Interpolate polynomials
-    let mut poly_Q_A = PolynomialInterpolator::new();
-    poly_Q_A.interpolate(&Q_A);
-
-    let mut poly_Q_B = PolynomialInterpolator::new();
-    poly_Q_B.interpolate(&Q_B);
-
-    let mut poly_Q_C = PolynomialInterpolator::new();
-    poly_Q_C.interpolate(&Q_C);
+    // ✅ Parallelize the three independent interpolations
+    let (poly_Q_A, (poly_Q_B, poly_Q_C)) = rayon::join(
+        || {
+            let mut p = PolynomialInterpolator::new();
+            p.interpolate(&Q_A);
+            p
+        },
+        || rayon::join(
+            || {
+                let mut p = PolynomialInterpolator::new();
+                p.interpolate(&Q_B);
+                p
+            },
+            || {
+                let mut p = PolynomialInterpolator::new();
+                p.interpolate(&Q_C);
+                p
+            },
+        ),
+    );
 
     (poly_Q_A, poly_Q_B, poly_Q_C)
 }

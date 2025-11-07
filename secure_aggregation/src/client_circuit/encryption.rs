@@ -1,13 +1,14 @@
-use ark_ff::{BigInteger, PrimeField};
+use ark_ff::{BigInteger, PrimeField, Zero};
 use ark_r1cs_std::alloc::AllocVar;
 use ark_r1cs_std::eq::EqGadget;
 use ark_r1cs_std::fields::FieldVar;
 use ark_r1cs_std::fields::fp::FpVar;
 use ark_r1cs_std::R1CSVar;
-use ark_relations::r1cs::SynthesisError;
+use ark_relations::r1cs::{ConstraintSystemRef, SynthesisError};
 use num::One;
 use num_bigint::BigUint;
-use crate::encryption_circuit::smallness::{enforce_x_less_than_limit, enforce_x_less_than_limit_power_of_two};
+use rand::Rng;
+use crate::client_circuit::smallness::{enforce_x_less_than_limit, enforce_x_less_than_limit_power_of_two};
 
 /// The secure_aggregation composite circuit function.
 ///
@@ -161,6 +162,124 @@ pub fn AHE_relation<F: PrimeField>(
     Ok(())
 }
 
+pub fn get_AHE_params<F:PrimeField>(cs: ConstraintSystemRef<F>) -> (
+    FpVar<F>,
+    FpVar<F>,
+    usize,
+    FpVar<F>,
+    Vec<FpVar<F>>,
+    Vec<FpVar<F>>,
+    Vec<FpVar<F>>,
+    Vec<FpVar<F>>,
+    Vec<FpVar<F>>
+) {
+    const N: usize = 4096; // Vector length (Polynomial degree N-1)
+
+    // Moduli values: Q = 2^96, ell = 2^20
+    let ell_big: BigUint = BigUint::from(1u64) << 20;
+
+    // Convert BigUint to Field elements
+    let q = 96usize;
+    let ell = F::from_le_bytes_mod_order(ell_big.to_bytes_le().as_ref());
+
+    // Random challenge values (kept small for computation feasibility)
+    let mut rng = rand::thread_rng();
+    let r1_val: u64 = rng.gen_range(1..100);
+    let r2_val: u64 = rng.gen_range(1..100);
+
+    let r1 = F::from(r1_val);
+    let r2 = F::from(r2_val);
+
+    // Input vectors, must satisfy smallness v_i < ell
+    let u_vals: Vec<u64> = (0..N).map(|_| rng.gen_range(1..1000)).collect();
+    let v_vals: Vec<u64> = (0..N).map(|_| rng.gen_range(1..1000)).collect();
+
+    // Compute the resulting polynomial
+    let res_vals = vec![F::zero(); N];
+
+    // --- 3. Allocate FpVar Witnesses/Constants ---
+    let ell_var = FpVar::<F>::new_witness(cs.clone(), || Ok(ell)).unwrap();
+
+    let r1_var = FpVar::<F>::new_witness(cs.clone(), || Ok(r1)).unwrap();
+    let r2_var = FpVar::<F>::new_witness(cs.clone(), || Ok(r2)).unwrap();
+
+    // u is public constant
+    let u_vars: Vec<FpVar<F>> = u_vals.iter()
+        .map(|&val| FpVar::<F>::constant(F::from(val)))
+        .collect();
+
+    // v, res are witnesses
+    let v_vars: Vec<FpVar<F>> = v_vals.iter()
+        .map(|&val| FpVar::<F>::new_witness(cs.clone(), || Ok(F::from(val))).unwrap())
+        .collect();
+
+    let res_vars: Vec<FpVar<F>> = res_vals.iter()
+        .map(|&val| FpVar::<F>::new_witness(cs.clone(), || Ok(val)).unwrap())
+        .collect();
+
+    let pow2_q_vars = get_pow2_coeffs(cs.clone(), q);
+    let pow2_ell_vars = get_pow2_coeffs(cs.clone(), ell_big.bits() as usize * 2);
+
+    (
+        r1_var, r2_var, q, ell_var,
+        v_vars, u_vars, res_vars,
+        pow2_q_vars, pow2_ell_vars
+    )
+}
+
+/// Helper function to create powers of two constants for smallness checks.
+pub fn get_pow2_coeffs<F: PrimeField>(cs: ConstraintSystemRef<F>, bit_len: usize) -> Vec<FpVar<F>> {
+    let mut pow2_coeffs = Vec::with_capacity(bit_len);
+    let mut cur = F::from(1u64);
+    for _ in 0..bit_len {
+        pow2_coeffs.push(FpVar::<F>::constant(cur));
+        cur.double_in_place();
+    }
+    pow2_coeffs
+}
+
+/// Helper to compute polynomial evaluation $\sum a_i r^i$ in $F_P$
+fn poly_eval<F: PrimeField>(a: &[u64], r: F) -> F {
+    let mut sum = F::zero();
+    let mut r_power = F::one();
+    for &a_i in a.iter() {
+        sum += F::from(a_i) * r_power;
+        r_power *= r;
+    }
+    sum
+}
+
+/// Helper: smallest power of two >= n
+fn next_power_of_two_usize(n: usize) -> usize {
+    if n.is_power_of_two() {
+        n
+    } else {
+        n.next_power_of_two()
+    }
+}
+
+fn average_bit_length<F: PrimeField>(witness: &[F]) -> f64 {
+    let mut total_bits = 0usize;
+    for elem in witness {
+        // Convert to BigUint
+        let bigint = elem.into_bigint();
+        let n: BigUint = bigint.into();
+
+        let bits = if n.is_zero() {
+            1
+        } else {
+            n.bits() as usize
+        };
+        total_bits += bits;
+    }
+
+    if witness.is_empty() {
+        0.0
+    } else {
+        total_bits as f64 / witness.len() as f64
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::{Duration, Instant};
@@ -173,59 +292,6 @@ mod tests {
     use crate::constant_for_curves::{ScalarField, G1};
     use crate::pederson::PedersenCommitment;
     use crate::commitment::CommitmentScheme;
-
-    /// Helper function to create powers of two constants for smallness checks.
-    fn get_pow2_coeffs<F: PrimeField>(cs: ConstraintSystemRef<F>, bit_len: usize) -> Vec<FpVar<F>> {
-        let mut pow2_coeffs = Vec::with_capacity(bit_len);
-        let mut cur = F::from(1u64);
-        for _ in 0..bit_len {
-            pow2_coeffs.push(FpVar::<F>::constant(cur));
-            cur.double_in_place();
-        }
-        pow2_coeffs
-    }
-
-    /// Helper to compute polynomial evaluation $\sum a_i r^i$ in $F_P$
-    fn poly_eval<F: PrimeField>(a: &[u64], r: F) -> F {
-        let mut sum = F::zero();
-        let mut r_power = F::one();
-        for &a_i in a.iter() {
-            sum += F::from(a_i) * r_power;
-            r_power *= r;
-        }
-        sum
-    }
-
-    /// Helper: smallest power of two >= n
-    fn next_power_of_two_usize(n: usize) -> usize {
-        if n.is_power_of_two() {
-            n
-        } else {
-            n.next_power_of_two()
-        }
-    }
-
-    fn average_bit_length<F: PrimeField>(witness: &[F]) -> f64 {
-        let mut total_bits = 0usize;
-        for elem in witness {
-            // Convert to BigUint
-            let bigint = elem.into_bigint();
-            let n: BigUint = bigint.into();
-
-            let bits = if n.is_zero() {
-                1
-            } else {
-                n.bits() as usize
-            };
-            total_bits += bits;
-        }
-
-        if witness.is_empty() {
-            0.0
-        } else {
-            total_bits as f64 / witness.len() as f64
-        }
-    }
 
     #[test]
     fn test_large_scale_constraint_count() {

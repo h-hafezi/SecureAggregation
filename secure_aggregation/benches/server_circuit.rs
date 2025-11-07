@@ -16,11 +16,13 @@ use ark_ec::pairing::Pairing;
 use ark_r1cs_std::alloc::{AllocVar, AllocationMode};
 use ark_relations::r1cs::{ConstraintSystem, SynthesisMode};
 use ark_serialize::CanonicalSerialize;
+use ark_std::UniformRand;
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::thread_rng;
 use kzh_fold::kzh3_verifier_circuit::prover::KZH3VerifierCircuitProver;
 use kzh_fold::kzh3_verifier_circuit::verifier_circuit::KZH3VerifierVar;
 use kzh_fold::nexus_spartan::conversion::convert_crr1cs;
+use kzh_fold::nexus_spartan::matrix_evaluation_accumulation::prover::compute_q;
 use secure_aggregation::server_circuit::KZH3ServerCircuitVar;
 
 fn bench(c: &mut Criterion) {
@@ -238,16 +240,14 @@ fn bench(c: &mut Criterion) {
     });
 
 
+    // Generate random elements in the field for r_x_prime and r_y_prime
+    let r_x_prime: Vec<F> = (0..rx.len()).map(|_| F::rand(&mut thread_rng())).collect();
+    let r_y_prime: Vec<F> = (0..ry.len()).map(|_| F::rand(&mut thread_rng())).collect();
+
     let bench_name = "accumulate A B C terms for the next round".to_string();
     c.bench_function(&bench_name, |b| {
         b.iter(|| {
-            let _ = MatrixEvaluationAccVerifier::random_from_eval_point(
-                &shape,
-                rx.clone(),
-                ry.clone(),
-                &mut thread_rng(),
-            );
-
+            let _ = compute_q(&shape, (rx.clone(), ry.clone()), (r_x_prime.clone(), r_y_prime.clone()));
         })
     });
 
@@ -327,6 +327,22 @@ fn bench(c: &mut Criterion) {
         })
     });
 
+    let inst_evals = shape.inst.inst.evaluate(&rx, &ry);
+
+    let bench_name = "the spartan verifier".to_string();
+    c.bench_function(&bench_name, |b| {
+        b.iter(|| {
+            let _ = proof
+                .verify(
+                    shape.get_num_vars(),
+                    shape.get_num_cons(),
+                    &instance,
+                    &inst_evals,
+                    &mut Transcript::new(b"new"),
+                )
+                .is_ok();
+        })
+    });
 }
 
 fn custom_criterion_config() -> Criterion {

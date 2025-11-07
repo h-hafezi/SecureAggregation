@@ -1,4 +1,8 @@
-use kzh_fold::commitment::CommitmentScheme;
+pub mod smallness;
+pub mod encryption;
+
+
+/*use kzh_fold::commitment::CommitmentScheme;
 use kzh_fold::gadgets::non_native::non_native_affine_var::NonNativeAffineVar;
 use kzh_fold::kzh::kzh3::{KZH3, KZH3SRS};
 use kzh_fold::kzh::KZH;
@@ -18,10 +22,12 @@ use ark_r1cs_std::fields::FieldVar;
 use ark_relations::r1cs::{ConstraintSystemRef, Namespace, SynthesisError};
 use itertools::izip;
 use std::borrow::Borrow;
-use crate::client_circuit::encryption::get_AHE_params;
+use crate::client_circuit::encryption::{get_AHE_params, AHE_relation};
+use crate::constant_for_curves::ScalarField;
+use crate::merkle_tree::mimc_var::mr_path_verification;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct KZH3ServerCircuit<G1, G2, C2, E, F>
+pub struct KZH3ClientCircuit<G1, G2, C2, E, F>
 where
     G1: SWCurveConfig + Clone,
     G1::BaseField: PrimeField,
@@ -38,7 +44,7 @@ where
     pub matrix_evaluation_verifier: MatrixEvaluationAccVerifier<F>,
 }
 
-pub struct KZH3ServerCircuitVar<G1, G2, C2, F>
+pub struct KZH3ClientCircuitVar<G1, G2, C2, F>
 where
     F: PrimeField + Absorb,
     G1::BaseField: PrimeField,
@@ -53,7 +59,7 @@ where
     pub matrix_evaluation_verifier: MatrixEvaluationAccVerifierVar<F>,
 }
 
-impl<G1, G2, C2, E, F> AllocVar<KZH3ServerCircuit<G1, G2, C2, E, F>, F> for KZH3ServerCircuitVar<G1, G2, C2, F>
+impl<G1, G2, C2, E, F> AllocVar<KZH3ClientCircuit<G1, G2, C2, E, F>, F> for KZH3ClientCircuitVar<G1, G2, C2, F>
 where
     G1: SWCurveConfig + Clone,
     G1::BaseField: PrimeField,
@@ -65,7 +71,7 @@ where
     E: Pairing<G1Affine=Affine<G1>, ScalarField=F>,
     F: PrimeField,
 {
-    fn new_variable<T: Borrow<KZH3ServerCircuit<G1, G2, C2, E, F>>>(
+    fn new_variable<T: Borrow<KZH3ClientCircuit<G1, G2, C2, E, F>>>(
         cs: impl Into<Namespace<F>>,
         f: impl FnOnce() -> Result<T, SynthesisError>,
         mode: AllocationMode,
@@ -100,7 +106,7 @@ where
             mode,
         )?;
 
-        Ok(KZH3ServerCircuitVar {
+        Ok(KZH3ClientCircuitVar {
             spartan_partial_verifier,
             kzh_acc_verifier,
             matrix_evaluation_verifier,
@@ -108,7 +114,7 @@ where
     }
 }
 
-impl<G1, G2, C2, F> KZH3ServerCircuitVar<G1, G2, C2, F>
+impl<G1, G2, C2, F> KZH3ClientCircuitVar<G1, G2, C2, F>
 where
     F: PrimeField + Absorb,
     G1::BaseField: PrimeField,
@@ -118,7 +124,7 @@ where
     C2: CommitmentScheme<Projective<G2>>,
     G1: SWCurveConfig<BaseField=G2::ScalarField, ScalarField=G2::BaseField> + Clone,
 {
-    pub fn verify<E: Pairing>(&self, pcs_srs: &KZH3SRS<E>, cs: ConstraintSystemRef<F>, transcript: &mut TranscriptVar<F>)
+    pub fn verify<E: Pairing<ScalarField=F>>(&self, pcs_srs: &KZH3SRS<E>, cs: ConstraintSystemRef<F>, transcript: &mut TranscriptVar<F>)
     where
         <E as Pairing>::ScalarField: Absorb,
         <<E as Pairing>::G1Affine as ark_ec::AffineRepr>::BaseField: PrimeField,
@@ -158,13 +164,16 @@ where
             &self.kzh_acc_verifier.current_accumulator_instance_var.C_var,
         ).expect("error while enforcing equality");
 
-        // the server verifies also accumulates two client circuit, in reality it should be a different circuit but since the constraint count is the same,
-        // we just run the accumulation scheme again, however it should be replaced with the real circuits for proper implementation
-        // also return these later
-        // let mut transcript = TranscriptVar::from_transcript(cs.clone(), Transcript::new(b"example"));
-        let _ = self.kzh_acc_verifier.accumulate(transcript);
-        // also return these later
-        let _ = self.matrix_evaluation_verifier.accumulate(transcript);
+        // run the client verification circuit
+        let params = get_AHE_params(cs.clone());
+        AHE_relation(
+            &params.0, &params.1, params.2, &params.3,
+            &params.4, &params.5, &params.6,
+            &params.7, &params.7,
+        ).expect("encryption circuit failed");
+
+        // run a circuit for MR verification
+        mr_path_verification::<F, E>(cs.clone(), 91, 23).expect("MR verification failed");
     }
 }
 
@@ -193,7 +202,7 @@ mod test {
     use kzh_fold::kzh3_verifier_circuit::prover::KZH3VerifierCircuitProver;
     use kzh_fold::kzh3_verifier_circuit::verifier_circuit::KZH3VerifierVar;
     use kzh_fold::nexus_spartan::conversion::convert_crr1cs;
-    use crate::server_circuit::{KZH3ServerCircuitVar};
+    use crate::client_circuit::KZH3ClientCircuitVar;
 
     #[test]
     fn test_kzh3_augmented_circuit() {
@@ -352,7 +361,7 @@ mod test {
         };
 
         // construct the augmented circuit
-        let augmented_circuit = KZH3ServerCircuitVar {
+        let augmented_circuit = KZH3ClientCircuitVar {
             spartan_partial_verifier: partial_verifier_var,
             kzh_acc_verifier: acc_verifier_var,
             matrix_evaluation_verifier: matrix_evaluation_verifier_var,
@@ -398,3 +407,4 @@ mod test {
         end_timer!(A_B_C_eval_timer);
     }
 }
+ */
