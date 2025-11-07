@@ -12,6 +12,8 @@ use ark_ff::PrimeField;
 use ark_serialize::*;
 use ark_std::cmp::max;
 use crate::kzh::KZH;
+use rayon::prelude::*;
+
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct SparseMatEntry<F: PrimeField> {
@@ -42,18 +44,21 @@ impl<F: PrimeField + Absorb> SparseMatPolynomial<F> {
         }
     }
 
-    fn evaluate_with_tables(&self, eval_table_rx: &[F], eval_table_ry: &[F]) -> F {
+    fn evaluate_with_tables(&self, eval_table_rx: &[F], eval_table_ry: &[F]) -> F
+    where
+        F: PrimeField + Send + Sync, // required for parallelism
+    {
         assert_eq!(self.num_vars_x.pow2(), eval_table_rx.len());
         assert_eq!(self.num_vars_y.pow2(), eval_table_ry.len());
 
-        (0..self.M.len())
-            .map(|i| {
-                let row = self.M[i].row;
-                let col = self.M[i].col;
-                let val = &self.M[i].val;
-                eval_table_rx[row] * eval_table_ry[col] * val
+        self.M
+            .par_iter() // parallel iterator
+            .map(|entry| {
+                let row = entry.row;
+                let col = entry.col;
+                eval_table_rx[row] * eval_table_ry[col] * entry.val
             })
-            .sum()
+            .reduce(|| F::zero(), |a, b| a + b) // parallel sum reduction
     }
 
     pub fn multi_evaluate(polys: &[&SparseMatPolynomial<F>], rx: &[F], ry: &[F]) -> Vec<F> {
