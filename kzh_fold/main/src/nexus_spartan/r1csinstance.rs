@@ -12,7 +12,7 @@ use ark_serialize::*;
 use ark_std::test_rng;
 use crate::kzh::KZH;
 
-#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct R1CSInstance<F: PrimeField + Absorb> {
     num_cons: usize,
     num_vars: usize,

@@ -19,7 +19,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use rand::thread_rng;
 use crate::kzh::KZH;
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Debug)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Debug, Clone)]
 pub struct CRR1CSProof<E: Pairing<ScalarField=F>, PC: KZH<E>, F: PrimeField + Absorb> {
     /// Sumcheck proof for the polynomial g(x) = \sum eq(tau,x) * (~Az~(x) * ~Bz~(x) - u * ~Cz~(x) - ~E~(x))
     pub sc_proof_phase1: SumcheckInstanceProof<F>,

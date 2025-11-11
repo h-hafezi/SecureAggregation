@@ -31,7 +31,7 @@ pub trait KZH<E: Pairing> where <E as Pairing>::ScalarField: Absorb {
     + ToAffine<E>;
     type Aux: AppendToTranscript<E::ScalarField> + Sync + CanonicalSerialize + CanonicalDeserialize + Debug;
 
-    type Opening: Sync + CanonicalSerialize + CanonicalDeserialize + Debug;
+    type Opening: Sync + CanonicalSerialize + CanonicalDeserialize + Debug + Clone;
 
     fn split_input<T: Clone>(srs: &Self::SRS, input: &[T], default: T) -> Vec<Vec<T>>;
 

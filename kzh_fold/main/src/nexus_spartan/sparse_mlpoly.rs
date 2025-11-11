@@ -15,7 +15,7 @@ use crate::kzh::KZH;
 use rayon::prelude::*;
 
 
-#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct SparseMatEntry<F: PrimeField> {
     row: usize,
     col: usize,
@@ -28,7 +28,7 @@ impl<F: PrimeField> SparseMatEntry<F> {
     }
 }
 
-#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize, Clone)]
 pub struct SparseMatPolynomial<F: PrimeField> {
     num_vars_x: usize,
     num_vars_y: usize,

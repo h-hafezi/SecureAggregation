@@ -1,29 +1,31 @@
-use kzh_fold::constant_for_curves::{ScalarField as F, C2, E, G1, G2};
-use kzh_fold::kzh::kzh3::{KZH3, KZH3SRS};
-use kzh_fold::kzh::KZH;
-use kzh_fold::kzh_fold::kzh3_fold::{Accumulator3 as Accumulator, Accumulator3};
-use kzh_fold::nexus_spartan::commitment_traits::ToAffine;
-use kzh_fold::nexus_spartan::committed_relaxed_snark::CRSNARKKey;
-use kzh_fold::nexus_spartan::crr1cs::{is_sat, produce_synthetic_crr1cs, CRR1CSInstance, CRR1CSShape, CRR1CSWitness};
-use kzh_fold::nexus_spartan::crr1csproof::CRR1CSProof;
-use kzh_fold::nexus_spartan::matrix_evaluation_accumulation::verifier_circuit::{MatrixEvaluationAccVerifier, MatrixEvaluationAccVerifierVar};
-use kzh_fold::nexus_spartan::partial_verifier::partial_verifier::SpartanPartialVerifier;
-use kzh_fold::nexus_spartan::partial_verifier::partial_verifier_var::SpartanPartialVerifierVar;
-use kzh_fold::nova::cycle_fold::coprocessor::setup_shape;
-use kzh_fold::transcript::transcript::Transcript;
-use kzh_fold::transcript::transcript_var::TranscriptVar;
 use ark_ec::pairing::Pairing;
 use ark_r1cs_std::alloc::{AllocVar, AllocationMode};
 use ark_relations::r1cs::{ConstraintSystem, SynthesisMode};
 use ark_serialize::CanonicalSerialize;
 use ark_std::UniformRand;
 use criterion::{criterion_group, criterion_main, Criterion};
-use rand::thread_rng;
+use kzh_fold::constant_for_curves::{ScalarField as F, C2, E, G1, G2};
+use kzh_fold::kzh::kzh3::{KZH3, KZH3SRS};
+use kzh_fold::kzh::KZH;
 use kzh_fold::kzh3_verifier_circuit::prover::KZH3VerifierCircuitProver;
 use kzh_fold::kzh3_verifier_circuit::verifier_circuit::KZH3VerifierVar;
+use kzh_fold::kzh_fold::kzh3_fold::Accumulator3 as Accumulator;
+use kzh_fold::nexus_spartan::commitment_traits::ToAffine;
+use kzh_fold::nexus_spartan::committed_relaxed_snark::CRSNARKKey;
 use kzh_fold::nexus_spartan::conversion::convert_crr1cs;
+use kzh_fold::nexus_spartan::crr1cs::{is_sat, produce_synthetic_crr1cs, CRR1CSInstance, CRR1CSShape, CRR1CSWitness};
+use kzh_fold::nexus_spartan::crr1csproof::CRR1CSProof;
 use kzh_fold::nexus_spartan::matrix_evaluation_accumulation::prover::compute_q;
+use kzh_fold::nexus_spartan::matrix_evaluation_accumulation::verifier_circuit::{MatrixEvaluationAccVerifier, MatrixEvaluationAccVerifierVar};
+use kzh_fold::nexus_spartan::partial_verifier::partial_verifier::SpartanPartialVerifier;
+use kzh_fold::nexus_spartan::partial_verifier::partial_verifier_var::SpartanPartialVerifierVar;
+use kzh_fold::nova::cycle_fold::coprocessor::setup_shape;
+use kzh_fold::transcript::transcript::Transcript;
+use kzh_fold::transcript::transcript_var::TranscriptVar;
+use rand::thread_rng;
 use secure_aggregation::client_circuit::KZH3ClientCircuitVar;
+use std::sync::Arc;
+use std::thread;
 
 fn bench(c: &mut Criterion) {
     // Directly map poseidon_num to (num_vars, num_inputs)
@@ -250,7 +252,7 @@ fn bench(c: &mut Criterion) {
     });
 
 
-    let (acc_srs, current_acc, running_acc) = {
+    let (acc_srs, current_acc, _) = {
         let acc_srs = Accumulator::setup(srs.clone(), &mut thread_rng());
 
         // Get the KZH opening proof from the Spartan proof
@@ -334,6 +336,56 @@ fn bench(c: &mut Criterion) {
                 )
                 .is_ok();
         })
+    });
+
+    let bench_name = "all in one thread".to_string();
+    c.bench_function(&bench_name, |b| {
+        // Clone Arc references once outside the loop
+        let acc_srs = Arc::new(acc_srs.clone());
+        let current_acc = Arc::new(current_acc.clone());
+        let shape = Arc::new(shape.clone());
+        let proof = Arc::new(proof.clone());
+        let instance = Arc::new(instance.clone());
+        let rx = Arc::new(rx.clone());
+        let ry = Arc::new(ry.clone());
+
+        b.iter(|| {
+            let acc_srs_t1 = Arc::clone(&acc_srs);
+            let current_acc_t1 = Arc::clone(&current_acc);
+
+            let shape_t2 = Arc::clone(&shape);
+            let rx_t2 = Arc::clone(&rx);
+            let ry_t2 = Arc::clone(&ry);
+
+            let shape_t3 = Arc::clone(&shape);
+            let proof_t3 = Arc::clone(&proof);
+            let instance_t3 = Arc::clone(&instance);
+            let rx_t3 = Arc::clone(&rx);
+            let ry_t3 = Arc::clone(&ry);
+
+            let t1 = thread::spawn(move || {
+                Accumulator::decide(&acc_srs_t1, &current_acc_t1);
+            });
+
+            let t2 = thread::spawn(move || {
+                let _ = shape_t2.inst.inst.evaluate(&rx_t2, &ry_t2);
+            });
+
+            let t3 = thread::spawn(move || {
+                let inst_evals = shape_t3.inst.inst.evaluate(&rx_t3, &ry_t3);
+                let _ = proof_t3.verify(
+                    shape_t3.get_num_vars(),
+                    shape_t3.get_num_cons(),
+                    &instance_t3,
+                    &inst_evals,
+                    &mut Transcript::new(b"new"),
+                );
+            });
+
+            t1.join().unwrap();
+            t2.join().unwrap();
+            t3.join().unwrap();
+        });
     });
 }
 

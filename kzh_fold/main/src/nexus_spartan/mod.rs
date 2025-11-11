@@ -77,7 +77,7 @@ pub type VarsAssignment<F> = Assignment<F>;
 pub type InputsAssignment<F> = Assignment<F>;
 
 /// `Instance` holds the description of R1CS matrices
-#[derive(CanonicalDeserialize, CanonicalSerialize)]
+#[derive(CanonicalDeserialize, CanonicalSerialize, Clone)]
 pub struct Instance<F: PrimeField + Absorb> {
     pub inst: R1CSInstance<F>,
 }

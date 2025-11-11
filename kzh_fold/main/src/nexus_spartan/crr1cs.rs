@@ -12,7 +12,7 @@ use super::commitment_traits::{VectorCommitmentScheme};
 use super::{committed_relaxed_snark::CRSNARKKey, errors::R1CSError, InputsAssignment, Instance, VarsAssignment};
 
 
-#[derive(CanonicalDeserialize, CanonicalSerialize)]
+#[derive(CanonicalDeserialize, CanonicalSerialize, Clone)]
 pub struct CRR1CSShape<F: PrimeField + Absorb> {
     pub inst: Instance<F>,
 }
@@ -29,6 +29,7 @@ impl<F: PrimeField + Absorb> CRR1CSShape<F> {
     }
 }
 
+#[derive(Clone)]
 pub struct CRR1CSInstance<E: Pairing, PC: KZH<E>>
 where
     <E as Pairing>::ScalarField: Absorb,
