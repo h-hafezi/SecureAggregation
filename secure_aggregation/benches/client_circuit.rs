@@ -23,11 +23,11 @@ use kzh_fold::kzh3_verifier_circuit::prover::KZH3VerifierCircuitProver;
 use kzh_fold::kzh3_verifier_circuit::verifier_circuit::KZH3VerifierVar;
 use kzh_fold::nexus_spartan::conversion::convert_crr1cs;
 use kzh_fold::nexus_spartan::matrix_evaluation_accumulation::prover::compute_q;
-use secure_aggregation::server_circuit::KZH3ServerCircuitVar;
+use secure_aggregation::client_circuit::KZH3ClientCircuitVar;
 
 fn bench(c: &mut Criterion) {
     // Directly map poseidon_num to (num_vars, num_inputs)
-    let (num_vars, num_inputs) = (2 * 131072, 11);
+    let (num_vars, num_inputs) = (2 * 1048576, 11);
 
     let (pcs_srs, spartan_shape, spartan_instance, spartan_proof, rx, ry) = {
         let num_cons = num_vars;
@@ -181,7 +181,7 @@ fn bench(c: &mut Criterion) {
     };
 
     // construct the augmented circuit
-    let augmented_circuit = KZH3ServerCircuitVar {
+    let augmented_circuit = KZH3ClientCircuitVar {
         spartan_partial_verifier: partial_verifier_var,
         kzh_acc_verifier: acc_verifier_var,
         matrix_evaluation_verifier: matrix_evaluation_verifier_var,
@@ -224,6 +224,17 @@ fn bench(c: &mut Criterion) {
         &mut Transcript::new(b"new"),
     );
 
+    // Generate random elements in the field for r_x_prime and r_y_prime
+    let r_x_prime: Vec<F> = (0..rx.len()).map(|_| F::rand(&mut thread_rng())).collect();
+    let r_y_prime: Vec<F> = (0..ry.len()).map(|_| F::rand(&mut thread_rng())).collect();
+
+    let bench_name = "accumulate A B C terms for the next round".to_string();
+    c.bench_function(&bench_name, |b| {
+        b.iter(|| {
+            let _ = compute_q(&shape, (rx.clone(), ry.clone()), (r_x_prime.clone(), r_y_prime.clone()));
+        })
+    });
+
     let bench_name = "run spartan proof".to_string();
     c.bench_function(&bench_name, |b| {
         b.iter(|| {
@@ -238,17 +249,6 @@ fn bench(c: &mut Criterion) {
         })
     });
 
-
-    // Generate random elements in the field for r_x_prime and r_y_prime
-    let r_x_prime: Vec<F> = (0..rx.len()).map(|_| F::rand(&mut thread_rng())).collect();
-    let r_y_prime: Vec<F> = (0..ry.len()).map(|_| F::rand(&mut thread_rng())).collect();
-
-    let bench_name = "accumulate A B C terms for the next round".to_string();
-    c.bench_function(&bench_name, |b| {
-        b.iter(|| {
-            let _ = compute_q(&shape, (rx.clone(), ry.clone()), (r_x_prime.clone(), r_y_prime.clone()));
-        })
-    });
 
     let (acc_srs, current_acc, running_acc) = {
         let acc_srs = Accumulator::setup(srs.clone(), &mut thread_rng());
@@ -300,13 +300,6 @@ fn bench(c: &mut Criterion) {
         (acc_srs, current_acc, running_acc)
     };
 
-    let bench_name = "accumulate KZH3 for the next round".to_string();
-    c.bench_function(&bench_name, |b| {
-        b.iter(|| {
-            Accumulator3::prove(&acc_srs, &running_acc, &running_acc, &mut Transcript::new(b"new"))
-        })
-    });
-
     ///////////////////////////////////////////////////// bench the verifier time /////////////////////////////////////////////////////
 
     let bench_name = "run the KZH3 decider".to_string();
@@ -350,9 +343,9 @@ fn custom_criterion_config() -> Criterion {
 
 // Benchmark group setup
 criterion_group! {
-    name = server_circuit;
+    name = client_circuit;
     config = custom_criterion_config();
     targets = bench
 }
 
-criterion_main!(server_circuit);
+criterion_main!(client_circuit);

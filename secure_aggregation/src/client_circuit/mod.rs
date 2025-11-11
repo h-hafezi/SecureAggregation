@@ -2,7 +2,7 @@ pub mod smallness;
 pub mod encryption;
 
 
-/*use kzh_fold::commitment::CommitmentScheme;
+use kzh_fold::commitment::CommitmentScheme;
 use kzh_fold::gadgets::non_native::non_native_affine_var::NonNativeAffineVar;
 use kzh_fold::kzh::kzh3::{KZH3, KZH3SRS};
 use kzh_fold::kzh::KZH;
@@ -22,6 +22,7 @@ use ark_r1cs_std::fields::FieldVar;
 use ark_relations::r1cs::{ConstraintSystemRef, Namespace, SynthesisError};
 use itertools::izip;
 use std::borrow::Borrow;
+use rand::thread_rng;
 use crate::client_circuit::encryption::{get_AHE_params, AHE_relation};
 use crate::constant_for_curves::ScalarField;
 use crate::merkle_tree::mimc_var::mr_path_verification;
@@ -174,6 +175,15 @@ where
 
         // run a circuit for MR verification
         mr_path_verification::<F, E>(cs.clone(), 91, 23).expect("MR verification failed");
+
+        let len: usize = 4096usize / 3usize; // == 1365
+        let vector = (0..len)
+            .map(|_| FpVar::<F>::new_witness(cs.clone(), || Ok(F::rand(&mut thread_rng()))))
+            .collect::<Result<Vec<_>, SynthesisError>>().unwrap();
+
+
+        transcript.append_scalars(b"append", vector.as_slice());
+        let _ = transcript.challenge_scalar(b"challenge");
     }
 }
 
@@ -407,4 +417,4 @@ mod test {
         end_timer!(A_B_C_eval_timer);
     }
 }
- */
+

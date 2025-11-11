@@ -7,6 +7,6 @@ pub mod commitment;
 pub mod math;
 pub mod utils;
 pub mod merkle_tree;
-mod client_circuit;
+pub mod client_circuit;
 pub mod pederson;
 pub mod server_circuit;

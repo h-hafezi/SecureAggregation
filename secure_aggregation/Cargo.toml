@@ -83,3 +83,7 @@ name = "bench_mr"
 [[bench]]
 harness = false
 name = "server_circuit"
+
+[[bench]]
+harness = false
+name = "client_circuit"
